@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Подтверждение почты{% endblock %}
+{% block content %}
+<div class="card shadow-sm">
+  <div class="card-body p-4">
+    <h2 class="card-title mb-3 text-center">Подтверждение почты</h2>
+    <p>На адрес <strong>{{ email }}</strong> отправлен шестизначный код. Он действует 10 минут.</p>
+    <form method="post" novalidate>
+      {{ form.hidden_tag() }}
+      <div class="mb-3">
+        {{ form.code.label(class="form-label") }}
+        {{ form.code(class="form-control" + (" is-invalid" if form.code.errors else ""), inputmode="numeric", autocomplete="one-time-code", maxlength="6") }}
+        {% for error in form.code.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+      </div>
+      {{ form.submit(class="btn btn-primary w-100") }}
+    </form>
+    <p class="text-center mt-3 mb-0"><a href="{{ url_for('resend_verification') }}">Отправить код повторно</a></p>
+  </div>
+</div>
+{% endblock %}
