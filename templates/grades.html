@@ -1,0 +1,138 @@
+{% extends "app_base.html" %}
+{% block title %}Успеваемость{% endblock %}
+{% block page_title %}Успеваемость{% endblock %}
+{% block page_sub %}Оценки и средний балл{% endblock %}
+{% block content %}
+
+<div class="grid grid--3" style="margin-bottom:1.2rem;">
+    <div class="stat stat--gold">
+        <div class="stat__label">Средний балл</div>
+        <div class="stat__value">{{ average if average is not none else "—" }} <small>/ 5.0</small></div>
+        <div class="small muted">взвешенный по весу работ</div>
+    </div>
+    <div class="stat">
+        <div class="stat__label">Всего оценок</div>
+        <div class="stat__value">{{ total }}</div>
+        <div class="small muted">по {{ subjects|length }} дисциплин(ам)</div>
+    </div>
+    <div class="stat {% if distribution[2] or distribution[3] %}stat--gold{% endif %}">
+        <div class="stat__label">Требуют внимания</div>
+        <div class="stat__value">{{ risk|length }}</div>
+        <div class="small muted">средний балл ниже 3.5</div>
+    </div>
+</div>
+
+<div class="grid grid--sidebar">
+    <div class="stack">
+        <div class="card">
+            <div class="card__head">
+                <h2>По дисциплинам</h2>
+                <span class="small muted">средний балл</span>
+            </div>
+            {% if subjects %}
+                {% for item in subjects %}
+                <div class="meter">
+                    <div class="meter__row">
+                        <span>{{ item.name }} <span class="small muted">({{ item.count }} оценок)</span></span>
+                        <span class="grade grade--{{ item.average|round|int }}">{{ item.average }}</span>
+                    </div>
+                    <div class="bar"><span style="width: {{ item.percent }}%;"></span></div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="small muted" style="margin:0;">Оценок пока нет. Добавьте первую в форме справа.</p>
+            {% endif %}
+        </div>
+
+        <div class="card card--flush">
+            <div class="card__head" style="padding:1.1rem 1.2rem 0;">
+                <h3>Журнал оценок</h3>
+            </div>
+            {% if rows %}
+            <div class="table-wrap">
+                <table class="data">
+                    <thead><tr><th>Дата</th><th>Дисциплина</th><th>За что</th><th>Вес</th><th>Оценка</th><th></th></tr></thead>
+                    <tbody>
+                    {% for grade in rows %}
+                    <tr>
+                        <td class="nowrap num">{{ grade.graded_on.strftime("%d.%m.%Y") }}</td>
+                        <td><strong>{{ grade.subject }}</strong></td>
+                        <td class="small">{{ grade.control or "—" }}</td>
+                        <td class="num">{{ grade.weight }}</td>
+                        <td><span class="grade grade--{{ grade.value }}">{{ grade.value }}</span></td>
+                        <td style="text-align:right;">
+                            <form class="inline-form" method="post" action="{{ url_for('grade_delete', grade_id=grade.id) }}" data-confirm="Удалить оценку {{ grade.value }} по «{{ grade.subject }}»?">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn--danger btn--sm">Удалить</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty"><strong>Журнал пуст</strong>Добавьте оценку — средний балл посчитается автоматически.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="stack">
+        <div class="card">
+            <div class="card__head"><h3>Добавить оценку</h3></div>
+            <form method="post" novalidate>
+                {{ form.hidden_tag() }}
+                <div class="field {% if form.subject.errors %}field--error{% endif %}">
+                    {{ form.subject.label }}
+                    {{ form.subject(class="input", placeholder="Анатомия") }}
+                    {% for error in form.subject.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="form-row">
+                    <div class="field {% if form.value.errors %}field--error{% endif %}">
+                        {{ form.value.label }}
+                        {{ form.value(class="input", type="number", min="2", max="5", placeholder="5") }}
+                        {% for error in form.value.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="field">
+                        {{ form.weight.label }}
+                        {{ form.weight(class="input", type="number", min="1", max="10", placeholder="1") }}
+                    </div>
+                </div>
+                <div class="field">
+                    {{ form.control.label }}
+                    {{ form.control(class="input", placeholder="Контрольная, семинар…") }}
+                </div>
+                <div class="field">
+                    {{ form.graded_on.label }}
+                    {{ form.graded_on(class="input", type="date") }}
+                </div>
+                <button type="submit" class="btn btn--primary btn--block">Добавить оценку</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <div class="card__head"><h3>Распределение</h3></div>
+            {% for mark in [5, 4, 3, 2] %}
+            <div class="meter">
+                <div class="meter__row">
+                    <span class="grade grade--{{ mark }}">{{ mark }}</span>
+                    <span>{{ distribution[mark] }}</span>
+                </div>
+                <div class="bar">
+                    <span style="width: {{ (distribution[mark] / total * 100) if total else 0 }}%;"></span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if risk %}
+        <div class="card">
+            <div class="card__head"><h3>Требуют внимания</h3></div>
+            {% for item in risk %}
+            <div class="small" style="padding:.35rem 0;">{{ item.name }} — <strong>{{ item.average }}</strong></div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

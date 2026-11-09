@@ -1,0 +1,145 @@
+{% extends "app_base.html" %}
+{% block title %}Расписание{% endblock %}
+{% block page_title %}Расписание{% endblock %}
+{% block page_sub %}Текущая неделя · {{ parity_text }}{% endblock %}
+{% block content %}
+
+<div class="weekbar">
+    <div class="weekbar__label">
+        Неделя: <b>{{ today.strftime("%d.%m.%Y") }}</b> · <span class="pill pill--{{ 'even' if parity == 'even' else 'odd' }}">{{ parity_text }}</span>
+    </div>
+    <div class="spacer"></div>
+    <a class="btn btn--ghost btn--sm" href="{{ url_for('calendar_view') }}">Календарь</a>
+    <a class="btn btn--primary btn--sm" href="{{ url_for('lesson_create') }}">+ Занятие</a>
+</div>
+
+{% set visible_days = [] %}
+{% for weekday, day_date in day_dates.items() %}
+    {% if weekday == day_date.weekday() %}
+        {% if by_day.get(weekday) or events_by_date.get(day_date) %}
+            {% set _ = visible_days.append(weekday) %}
+        {% endif %}
+    {% endif %}
+{% endfor %}
+
+{% if visible_days %}
+    {% for weekday in visible_days %}
+    <section class="day">
+        <div class="day__head">
+            <h3>{{ weekdays[weekday] }}</h3>
+            <span class="day__date">{{ day_dates[weekday].strftime("%d.%m") }}</span>
+            {% if day_dates[weekday] == today %}
+            <span class="badge badge--olymp day__today">сегодня</span>
+            {% endif %}
+        </div>
+
+        {% for lesson in by_day.get(weekday, []) %}
+        <article class="lesson">
+            <div class="lesson__time">
+                {{ lesson.start_time.strftime("%H:%M") }}
+                <small>{{ lesson.end_time.strftime("%H:%M") if lesson.end_time else "—" }}</small>
+            </div>
+            <div>
+                <p class="lesson__title">{{ lesson.subject }}</p>
+                <div class="lesson__meta">
+                    <span>{{ kinds.get(lesson.kind, lesson.kind) }}</span>
+                    {% if lesson.room %}<span>ауд. {{ lesson.room }}</span>{% endif %}
+                    {% if lesson.teacher %}<span>{{ lesson.teacher }}</span>{% endif %}
+                    <span>{{ parity_labels.get(lesson.parity, "") }}</span>
+                </div>
+                {% if lesson.note %}
+                <div class="note">{{ lesson.note }}</div>
+                {% endif %}
+                <div id="note-{{ lesson.id }}" hidden>
+                    <form method="post" action="{{ url_for('lesson_note', lesson_id=lesson.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <textarea class="input" name="note" rows="2" placeholder="Текстовая пометка к паре">{{ lesson.note or "" }}</textarea>
+                        <button type="submit" class="btn btn--gold btn--sm">Сохранить пометку</button>
+                    </form>
+                </div>
+            </div>
+            <div class="lesson__use" style="display:flex;gap:.35rem;flex-wrap:wrap;">
+                <button type="button" class="btn btn--ghost btn--sm" data-note-toggle="note-{{ lesson.id }}">{{ "Изменить пометку" if lesson.note else "Пометка" }}</button>
+                <a class="btn btn--ghost btn--sm" href="{{ url_for('lesson_edit', lesson_id=lesson.id) }}">Изменить</a>
+            </div>
+        </article>
+        {% endfor %}
+
+        {% for event in events_by_date.get(day_dates[weekday], []) %}
+        <article class="lesson" style="background:rgba(252,163,17,.06);">
+            <div class="lesson__time">
+                {{ event.start_time.strftime("%H:%M") if event.start_time else "весь" }}
+                <small>{{ event.end_time.strftime("%H:%M") if event.end_time else "день" }}</small>
+            </div>
+            <div>
+                <p class="lesson__title"><span class="badge badge--{{ event.kind }}">{{ event.kind_label }}</span> {{ event.title }}</p>
+                <div class="lesson__meta">
+                    {% if event.location %}<span>{{ event.location }}</span>{% endif %}
+                    <span>{{ event.status_label }}</span>
+                </div>
+            </div>
+            <div class="lesson__use">
+                <a class="btn btn--ghost btn--sm" href="{{ url_for('event_edit', event_id=event.id) }}">Мероприятие</a>
+            </div>
+        </article>
+        {% endfor %}
+    </section>
+    {% endfor %}
+{% else %}
+<div class="card">
+    <div class="empty">
+        <strong>На эту неделю пока ничего нет</strong>
+        Добавьте занятия — они появятся здесь с учётом чётности недели.
+        <div style="margin-top:1rem;display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap;">
+            <a class="btn btn--primary" href="{{ url_for('lesson_create') }}">Добавить занятие</a>
+            <a class="btn btn--ghost" href="{{ url_for('event_create') }}">Добавить мероприятие</a>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="card" style="margin-top:1.2rem;">
+    <div class="card__head">
+        <h3>Полное расписание</h3>
+        <span class="small muted">с учётом чётных и нечётных недель</span>
+    </div>
+    {% set all_days = [] %}
+    {% for weekday in range(7) %}
+        {% if by_day.get(weekday) %}
+            {% set _ = all_days.append(weekday) %}
+        {% endif %}
+    {% endfor %}
+    {% if all_days %}
+        <div class="table-wrap">
+            <table class="data">
+                <thead>
+                    <tr><th>День</th><th>Время</th><th>Дисциплина</th><th>Тип</th><th>Аудитория</th><th>Неделя</th><th></th></tr>
+                </thead>
+                <tbody>
+                {% for weekday in all_days %}
+                    {% for lesson in by_day[weekday] %}
+                    <tr>
+                        <td class="nowrap">{{ weekdays[weekday] }}</td>
+                        <td class="nowrap num">{{ lesson.time_label }}</td>
+                        <td><strong>{{ lesson.subject }}</strong>{% if lesson.teacher %}<div class="small muted">{{ lesson.teacher }}</div>{% endif %}</td>
+                        <td class="small">{{ kinds.get(lesson.kind, lesson.kind) }}</td>
+                        <td class="small">{{ lesson.room or "—" }}</td>
+                        <td class="small">{{ "каждую" if lesson.parity == "all" else ("чётная" if lesson.parity == "even" else "нечётная") }}</td>
+                        <td style="text-align:right;white-space:nowrap;">
+                            <a class="btn btn--ghost btn--sm" href="{{ url_for('lesson_edit', lesson_id=lesson.id) }}">Изменить</a>
+                            <form class="inline-form" method="post" action="{{ url_for('lesson_delete', lesson_id=lesson.id) }}" data-confirm="Удалить занятие «{{ lesson.subject }}»?">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn--danger btn--sm">Удалить</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="small muted" style="margin:0;">Расписание пустое — начните с добавления первой пары.</p>
+    {% endif %}
+</div>
+{% endblock %}

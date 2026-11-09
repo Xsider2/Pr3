@@ -1,33 +1,53 @@
 {% extends "base.html" %}
 {% block title %}Вход{% endblock %}
-{% block content %}
-<div class="card shadow-sm">
-    <div class="card-body p-4">
-        <h2 class="card-title mb-4 text-center">Вход</h2>
-        <form method="post" novalidate>
-            {{ form.hidden_tag() }}
+{% block body_class %}auth-body{% endblock %}
+{% block layout %}
+<div class="auth">
+    <aside class="auth__aside">
+        <a class="logo" href="{{ url_for('index') }}">
+            <span id="logo-mark"></span>
+            <span class="logo__text">
+                <span class="logo__title">Smart Study</span>
+                <span class="logo__sub">учебный портал</span>
+            </span>
+        </a>
+        <div>
+            <div class="auth__brandline">умный учебный портал</div>
+            <h1 class="auth__headline">Расписание,<br>мероприятия<br>и <em>успеваемость</em></h1>
+            <p class="auth__lead">Всё, что нужно студенту в одном месте: пары по чётным и нечётным неделям, личные заметки, календарь и контроль оценок.</p>
+            <ul class="auth__points">
+                <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>Расписание с пометками и чётными неделями</span></li>
+                <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>Мероприятия института и личные дела</span></li>
+                <li><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>Оценки и средний балл в реальном времени</span></li>
+            </ul>
+        </div>
+        <p class="auth__foot">Защищённая авторизация · данные профиля хранятся отдельно для каждого студента</p>
+    </aside>
 
-            <div class="mb-3">
-                {{ form.email.label(class="form-label") }}
-                {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else "")) }}
-                {% for error in form.email.errors %}
-                <div class="invalid-feedback">{{ error }}</div>
-                {% endfor %}
-            </div>
+    <div class="auth__panel">
+        <div class="auth__card">
+            {% include "_flashes.html" %}
+            <h1>Вход в аккаунт</h1>
+            <p class="sub">Введите учебную почту и пароль</p>
+            <form method="post" novalidate>
+                {{ form.hidden_tag() }}
 
-            <div class="mb-4">
-                {{ form.password.label(class="form-label") }}
-                {{ form.password(class="form-control" + (" is-invalid" if form.password.errors else "")) }}
-                {% for error in form.password.errors %}
-                <div class="invalid-feedback">{{ error }}</div>
-                {% endfor %}
-            </div>
+                <div class="field {% if form.email.errors %}field--error{% endif %}">
+                    {{ form.email.label }}
+                    {{ form.email(class="input", placeholder="student@example.ru", autocomplete="email", inputmode="email") }}
+                    {% for error in form.email.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+                </div>
 
-            {{ form.submit(class="btn btn-primary w-100") }}
-        </form>
-        <p class="text-center mt-3 mb-0">
-            Нет аккаунта? <a href="{{ url_for('register') }}">Зарегистрироваться</a>
-        </p>
+                <div class="field {% if form.password.errors %}field--error{% endif %}">
+                    {{ form.password.label }}
+                    {{ form.password(class="input", placeholder="••••••••", autocomplete="current-password") }}
+                    {% for error in form.password.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+                </div>
+
+                <button type="submit" class="btn btn--primary btn--block">Войти</button>
+            </form>
+            <p class="auth__switch">Нет аккаунта? <a href="{{ url_for('register') }}">Зарегистрироваться</a></p>
+        </div>
     </div>
 </div>
 {% endblock %}

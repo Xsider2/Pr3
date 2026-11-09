@@ -1,0 +1,90 @@
+{% extends "app_base.html" %}
+{% block title %}Связка с Moodle{% endblock %}
+{% block page_title %}Объединение с Moodle{% endblock %}
+{% block page_sub %}Импорт курсов и занятий из системы дистанционного обучения{% endblock %}
+{% block content %}
+
+<div class="grid grid--sidebar">
+    <div class="stack">
+        <div class="card">
+            <div class="card__head">
+                <h2>Подключение</h2>
+                {% if connected %}
+                <span class="badge badge--olymp">подключено</span>
+                {% else %}
+                <span class="badge badge--other">не подключено</span>
+                {% endif %}
+            </div>
+
+            {% if connected %}
+            <dl class="kv" style="margin-bottom:1.1rem;">
+                <dt>Адрес Moodle</dt><dd>{{ profile.moodle_url }}</dd>
+                <dt>Токен</dt><dd>••••••••{{ profile.moodle_token[-4:] if profile.moodle_token|length > 4 else "" }}</dd>
+                <dt>Последнее обновление</dt><dd>{{ profile.updated_at.strftime("%d.%m.%Y %H:%M") if profile.updated_at else "—" }}</dd>
+            </dl>
+            <p class="small muted">Система использует сохранённый адрес и токен веб-сервиса Moodle, чтобы подтянуть список ваших курсов и контрольных точек. Токен хранится только в вашем профиле.</p>
+            {% else %}
+            <p class="small muted">Укажите адрес портала Moodle и токен веб-сервиса — они нужны, чтобы объединить расписание с курсами и дедлайнами заданий.</p>
+            {% endif %}
+
+            <div class="form-actions">
+                <a class="btn btn--primary" href="{{ url_for('settings') }}#moodle">Настроить связку</a>
+                <a class="btn btn--ghost" href="{{ url_for('schedule') }}">К расписанию</a>
+            </div>
+        </div>
+
+        <div class="card card--flush">
+            <div class="card__head" style="padding:1.1rem 1.2rem 0;">
+                <h2>Дисциплины, которые попадут в связку</h2>
+                <span class="small muted">{{ lessons|length }}</span>
+            </div>
+            {% if lessons %}
+            <div class="table-wrap">
+                <table class="data">
+                    <thead><tr><th>Дисциплина</th><th>Тип</th><th>День</th><th>Связь с Moodle</th></tr></thead>
+                    <tbody>
+                    {% for lesson in lessons %}
+                    <tr>
+                        <td><strong>{{ lesson.subject }}</strong></td>
+                        <td class="small">{{ kinds.get(lesson.kind, lesson.kind) }}</td>
+                        <td class="small nowrap">{{ lesson.weekday_label }}</td>
+                        <td>
+                            {% if connected %}
+                            <span class="badge badge--study">готова к синхронизации</span>
+                            {% else %}
+                            <span class="badge badge--other">требуется токен</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty"><strong>Дисциплин пока нет</strong>Добавьте занятия в расписании — они появятся здесь для связки с Moodle.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="stack">
+        <div class="card">
+            <div class="card__head"><h3>Как подключить</h3></div>
+            <ol class="small" style="padding-left:1.1rem;margin:0;line-height:1.9;">
+                <li>Войдите в Moodle института.</li>
+                <li>Откройте «Настройки → Безопасность → Ключи для мобильных устройств».</li>
+                <li>Создайте токен и скопируйте его.</li>
+                <li>Вставьте адрес портала и токен в настройках профиля.</li>
+            </ol>
+        </div>
+
+        <div class="card">
+            <div class="card__head"><h3>Что даёт объединение</h3></div>
+            <ul class="small" style="padding-left:1.1rem;margin:0;line-height:1.9;">
+                <li>Дисциплины из курсов подставляются в расписание.</li>
+                <li>Дедлайны заданий попадают в календарь.</li>
+                <li>Оценки из Moodle учитываются в успеваемости.</li>
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

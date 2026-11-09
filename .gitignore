@@ -5,3 +5,7 @@ __pycache__/
 .vs/
 bin/
 obj/
+instance/
+
+# Local database backups
+*_backup*.sql

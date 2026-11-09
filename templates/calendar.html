@@ -1,0 +1,42 @@
+{% extends "app_base.html" %}
+{% block title %}Календарь{% endblock %}
+{% block page_title %}Календарь{% endblock %}
+{% block page_sub %}{{ month_title }}{% endblock %}
+{% block content %}
+
+<div class="weekbar">
+    <a class="btn btn--ghost btn--sm" href="{{ url_for('calendar_view', year=prev_link.year, month=prev_link.month) }}">← Предыдущий</a>
+    <div class="weekbar__label" style="font-size:1.05rem;font-weight:700;color:var(--wine-900);">{{ month_title }}</div>
+    <div class="spacer"></div>
+    <a class="btn btn--ghost btn--sm" href="{{ url_for('calendar_view', year=today.year, month=today.month) }}">Сегодня</a>
+    <a class="btn btn--ghost btn--sm" href="{{ url_for('calendar_view', year=next_link.year, month=next_link.month) }}">Следующий →</a>
+    <a class="btn btn--primary btn--sm" href="{{ url_for('event_create') }}">+ Мероприятие</a>
+</div>
+
+<div class="card">
+    <div class="cal">
+        {% for name in weekdays_short %}
+        <div class="cal__dow">{{ name }}</div>
+        {% endfor %}
+        {% for cell in cells %}
+        <div class="cal__cell {% if not cell.in_month %}is-muted{% endif %} {% if cell.is_today %}is-today{% endif %}"
+             title="{{ cell.date.strftime('%d.%m.%Y') }}">
+            <span class="cal__num">{{ cell.date.day }}</span>
+            {% if cell.lessons %}
+            <span class="cal__dot cal__dot--class">{{ cell.lessons }} пар</span>
+            {% endif %}
+            {% for event in cell.events[:2] %}
+            <a class="cal__dot cal__dot--event" href="{{ url_for('event_edit', event_id=event.id) }}" title="{{ event.title }}">{{ event.title }}</a>
+            {% endfor %}
+            {% if cell.events|length > 2 %}
+            <span class="small muted">+{{ cell.events|length - 2 }}</span>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    <div class="small muted" style="margin-top:.9rem;">
+        <span class="cal__dot cal__dot--class" style="display:inline-block;">3 пар</span> — количество занятий по чётности недели,
+        <span class="cal__dot cal__dot--event" style="display:inline-block;">мероприятие</span> — переход к редактированию.
+    </div>
+</div>
+{% endblock %}

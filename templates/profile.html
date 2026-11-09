@@ -1,17 +1,114 @@
-{% extends "base.html" %}
+{% extends "app_base.html" %}
 {% block title %}Профиль{% endblock %}
+{% block page_title %}Профиль{% endblock %}
+{% block page_sub %}Личные данные и сводка{% endblock %}
 {% block content %}
-<div class="card shadow-sm">
-    <div class="card-body p-4">
-        <h2 class="card-title mb-3">Личный кабинет</h2>
-        <p class="mb-2">Добро пожаловать, <strong>{{ current_user.email }}</strong>!</p>
-        <p class="text-muted mb-4">
-            Аккаунт создан: {{ current_user.created_at.strftime("%d.%m.%Y в %H:%M") }}
-        </p>
-        <form method="post" action="{{ url_for('logout') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="btn btn-outline-danger">Выйти из аккаунта</button>
+
+<section class="profile-head">
+    <span class="avatar avatar--lg">{{ current_user.initials }}</span>
+    <div>
+        <h2>{{ profile.full_name or "Имя не указано" }}</h2>
+        <p>{{ current_user.email }}{% if profile.group_name %} · группа {{ profile.group_name }}{% endif %}{% if profile.faculty %} · {{ profile.faculty }}{% endif %}</p>
+        <p class="small" style="opacity:.7;">Аккаунт создан {{ current_user.created_at.strftime("%d.%m.%Y в %H:%M") }}</p>
+    </div>
+    <div class="spacer"></div>
+    <a class="btn btn--gold" href="{{ url_for('settings') }}">Настройки аккаунта</a>
+</section>
+
+<div class="grid grid--3" style="margin-bottom:1.2rem;">
+    <div class="stat --gold">
+        <div class="stat__label">Средний балл</div>
+        <div class="stat__value">{{ average if average is not none else "—" }}</div>
+        <div class="small muted">по всем оценкам</div>
+    </div>
+    <div class="stat">
+        <div class="stat__label">Мероприятия</div>
+        <div class="stat__value">{{ events_count }}</div>
+        <div class="small muted">в личном списке</div>
+    </div>
+    <div class="stat">
+        <div class="stat__label">Занятия</div>
+        <div class="stat__value">{{ lessons_count }}</div>
+        <div class="small muted">в расписании</div>
+    </div>
+</div>
+
+<div class="grid grid--sidebar">
+    <div class="card">
+        <div class="card__head">
+            <h2>Личные данные</h2>
+            <span class="badge badge--study">видно только вам</span>
+        </div>
+        <form method="post" novalidate>
+            {{ form.hidden_tag() }}
+
+            <div class="field {% if form.full_name.errors %}field--error{% endif %}">
+                {{ form.full_name.label }}
+                {{ form.full_name(class="input", placeholder="Иванова Мария Сергеевна") }}
+            </div>
+
+            <div class="form-row">
+                <div class="field">
+                    {{ form.group_name.label }}
+                    {{ form.group_name(class="input", placeholder="ЛДс 26-2-0") }}
+                </div>
+                <div class="field">
+                    {{ form.course.label }}
+                    {{ form.course(class="input", type="number", min="1", max="6", placeholder="2") }}
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="field">
+                    {{ form.faculty.label }}
+                    {{ form.faculty(class="input", placeholder="Лечебное дело") }}
+                </div>
+                <div class="field">
+                    {{ form.student_id.label }}
+                    {{ form.student_id(class="input", placeholder="например, 26-2-014") }}
+                </div>
+            </div>
+
+            <div class="field">
+                {{ form.bio.label }}
+                {{ form.bio(class="input", rows="3", placeholder="Пара слов о себе") }}
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary">Сохранить профиль</button>
+            </div>
         </form>
+    </div>
+
+    <div class="stack">
+        <div class="card">
+            <div class="card__head"><h3>Как хранятся данные</h3></div>
+            <p class="small muted" style="margin:0 0 .6rem;">
+                Профиль, мероприятия, расписание и оценки хранятся в отдельных таблицах и привязаны к вашему аккаунту.
+                Пароль записывается только как необратимый хеш — исходный текст не сохраняется.
+            </p>
+            <dl class="kv">
+                <dt>Учётная запись</dt><dd>{{ current_user.email }}</dd>
+                <dt>Пароль</dt><dd>хеш (wsgi-алгоритм)</dd>
+                <dt>Профиль</dt><dd>{% if profile.full_name %}заполнен{% else %}не заполнен{% endif %}</dd>
+                <dt>Moodle</dt><dd>{% if profile.moodle_url and profile.moodle_token %}подключён{% else %}не подключён{% endif %}</dd>
+            </dl>
+        </div>
+
+        <div class="card">
+            <div class="card__head"><h3>Последние оценки</h3></div>
+            {% if grades %}
+                {% for grade in grades %}
+                <div class="small" style="padding:.38rem 0;border-bottom:1px solid rgba(76,43,41,.06);display:flex;justify-content:space-between;gap:.6rem;">
+                    <span>{{ grade.subject|truncate(26) }}</span>
+                    <span class="grade grade--{{ grade.value }}">{{ grade.value }}</span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="small muted" style="margin:0;">Оценок пока нет.</p>
+            {% endif %}
+            <a class="btn btn--ghost btn--sm" style="margin-top:.9rem;" href="{{ url_for('grades') }}">Все оценки</a>
+        </div>
     </div>
 </div>
 {% endblock %}
