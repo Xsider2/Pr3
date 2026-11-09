@@ -8,6 +8,7 @@ from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from sqlalchemy.exc import IntegrityError
 import os
 from dotenv import load_dotenv
 
@@ -96,22 +97,32 @@ def index():
 
 
 @app.route("/register", methods=["GET", "POST"])
-@limiter.limit("4 per minute")  # Не более 4 попыток регистрации в минуту с одного IP
+# Не более 4 попыток регистрации в минуту с одного IP.
+# Считаем только отправки формы (POST), чтобы обновление страницы не вело к ошибке 429.
+@limiter.limit("4 per minute", methods=["POST"])
 def register():
     if current_user.is_authenticated:
         return redirect(url_for("profile"))
     form = RegisterForm()
     if form.validate_on_submit():
-        existing = User.query.filter_by(email=form.email.data.lower()).first()
+        email = form.email.data.strip().lower()
+        existing = User.query.filter_by(email=email).first()
         if existing:
             flash("Пользователь с таким email уже существует.", "danger")
         else:
-            user = User(email=form.email.data.lower())
+            user = User(email=email)
             user.set_password(form.password.data)
             db.session.add(user)
-            db.session.commit()
-            flash("Регистрация успешна. Теперь можно войти.", "success")
-            return redirect(url_for("login"))
+            try:
+                db.session.commit()
+            except IntegrityError:
+                # Два запроса с одним email могли пройти проверку одновременно:
+                # уникальный индекс в базе не даст создать дубликат.
+                db.session.rollback()
+                flash("Пользователь с таким email уже существует.", "danger")
+            else:
+                flash("Регистрация успешна. Теперь можно войти.", "success")
+                return redirect(url_for("login"))
     return render_template("register.html", form=form)
 
 
