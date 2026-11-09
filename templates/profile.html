@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Профиль{% endblock %}
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-body p-4">
+        <h2 class="card-title mb-3">Личный кабинет</h2>
+        <p class="mb-2">Добро пожаловать, <strong>{{ current_user.email }}</strong>!</p>
+        <p class="text-muted mb-4">
+            Аккаунт создан: {{ current_user.created_at.strftime("%d.%m.%Y в %H:%M") }}
+        </p>
+        <a href="{{ url_for('logout') }}" class="btn btn-outline-danger">Выйти из аккаунта</a>
+    </div>
+</div>
+{% endblock %}

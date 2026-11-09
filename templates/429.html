@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Слишком много запросов{% endblock %}
+{% block content %}
+<div class="card shadow-sm border-warning">
+    <div class="card-body p-4 text-center">
+        <h2 class="card-title text-warning mb-3">⏱ Слишком много запросов</h2>
+        <p class="mb-4">Вы сделали слишком много попыток за короткое время. Пожалуйста, подождите минуту и попробуйте снова.</p>
+        <a href="{{ url_for('index') }}" class="btn btn-primary">На главную</a>
+    </div>
+</div>
+{% endblock %}
