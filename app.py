@@ -38,17 +38,45 @@ else:
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
 
-# --- Безопасность cookie сессии ---
+# --- Безопасность сессии и CSRF ---
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["REMEMBER_COOKIE_HTTPONLY"] = True
 app.config["REMEMBER_COOKIE_SAMESITE"] = "Lax"
 
-# Secure cookie работает только по HTTPS.
-# В локальной разработке (http://127.0.0.1) флаг нужно отключить,
-# иначе браузер не будет отправлять cookie и вход сломается.
-app.config["SESSION_COOKIE_SECURE"] = os.environ.get("FLASK_ENV") == "production"
-app.config["REMEMBER_COOKIE_SECURE"] = os.environ.get("FLASK_ENV") == "production"
+# Secure cookies включаются для production по умолчанию или явно через COOKIE_SECURE=1.
+# Для локального HTTP оставляйте COOKIE_SECURE=0; для HTTPS staging/production включайте 1.
+cookie_secure_env = os.environ.get("COOKIE_SECURE", "").strip().lower()
+cookie_secure = (
+    cookie_secure_env in {"1", "true", "yes", "on"}
+    if cookie_secure_env
+    else os.environ.get("FLASK_ENV", "").lower() == "production"
+)
+app.config["SESSION_COOKIE_SECURE"] = cookie_secure
+app.config["REMEMBER_COOKIE_SECURE"] = cookie_secure
+
+# Защита всех изменяющих запросов, включая маршруты не на FlaskForm.
+csrf = CSRFProtect(app)
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; "
+        "base-uri 'self'; "
+        "form-action 'self'; "
+        "frame-ancestors 'none'; "
+        "object-src 'none'; "
+        "img-src 'self' data:; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "script-src 'self' https://cdn.jsdelivr.net; "
+        "font-src 'self' data: https://cdn.jsdelivr.net"
+    )
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    return response
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -188,4 +216,5 @@ def ratelimit_handler(e):
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    # Debugger is off by default. Enable only for local development with FLASK_DEBUG=1.
+    app.run(debug=os.environ.get("FLASK_DEBUG", "0") == "1")
