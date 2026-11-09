@@ -9,6 +9,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from sqlalchemy.exc import IntegrityError
+from urllib.parse import urlsplit
 import os
 from dotenv import load_dotenv
 
@@ -83,6 +84,20 @@ def load_user(user_id):
     return db.session.get(User, int(user_id))
 
 
+def is_safe_next(target):
+    """Разрешает перенаправление после входа только на путь внутри этого сайта.
+
+    Отклоняются полные адреса (https://...), адреса без схемы (//host),
+    обратные слэши (браузеры считают их за обычные) и управляющие символы.
+    """
+    if not target or any(ord(ch) < 32 for ch in target):
+        return False
+    if not target.startswith("/") or target.startswith("//") or target.startswith("/\\"):
+        return False
+    parts = urlsplit(target)
+    return not parts.scheme and not parts.netloc
+
+
 # --- Формы ---
 class RegisterForm(FlaskForm):
     email = StringField("Email", validators=[DataRequired(), Email(), Length(max=120)])
@@ -134,7 +149,9 @@ def register():
 
 
 @app.route("/login", methods=["GET", "POST"])
-@limiter.limit("4 per minute")  # Не более 4 попыток входа в минуту с одного IP
+# Не более 4 попыток входа в минуту с одного IP.
+# Считаем только отправки формы (POST), чтобы обновление страницы не вело к ошибке 429.
+@limiter.limit("4 per minute", methods=["POST"])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("profile"))
@@ -145,7 +162,7 @@ def login():
             login_user(user)
             flash("Вы вошли в аккаунт.", "success")
             next_page = request.args.get("next")
-            return redirect(next_page or url_for("profile"))
+            return redirect(next_page if is_safe_next(next_page) else url_for("profile"))
         flash("Неверный email или пароль.", "danger")
     return render_template("login.html", form=form)
 
