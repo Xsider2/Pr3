@@ -44,47 +44,11 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["REMEMBER_COOKIE_HTTPONLY"] = True
 app.config["REMEMBER_COOKIE_SAMESITE"] = "Lax"
 
-# Включайте COOKIE_SECURE=1 для любого HTTPS-окружения (включая HTTPS staging).
-# В production флаг включается автоматически. Для локального HTTP оставляем False.
-COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "").strip().lower() in {
-    "1", "true", "yes", "on"
-}
-app.config["SESSION_COOKIE_SECURE"] = (
-    COOKIE_SECURE or os.environ.get("FLASK_ENV", "").lower() == "production"
-)
-app.config["REMEMBER_COOKIE_SECURE"] = app.config["SESSION_COOKIE_SECURE"]
-
-# Защищаем все POST/PUT/PATCH/DELETE-запросы CSRF-токеном,
-# в том числе logout, который не использует WTForms.
-csrf = CSRFProtect(app)
-
-
-@app.after_request
-def add_security_headers(response):
-    # Bootstrap загружается с jsDelivr; inline-стили разрешены для Bootstrap
-    # и существующего style-атрибута max-width в шаблонах.
-    response.headers.setdefault(
-        "Content-Security-Policy",
-        "default-src 'self'; "
-        "base-uri 'self'; "
-        "object-src 'none'; "
-        "frame-ancestors 'none'; "
-        "form-action 'self'; "
-        "img-src 'self' data:; "
-        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-        "script-src 'self' https://cdn.jsdelivr.net; "
-        "font-src 'self' data: https://cdn.jsdelivr.net; "
-        "connect-src 'self'"
-    )
-    response.headers.setdefault("X-Content-Type-Options", "nosniff")
-    response.headers.setdefault("X-Frame-Options", "DENY")
-    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-    response.headers.setdefault(
-        "Permissions-Policy",
-        "camera=(), microphone=(), geolocation=()"
-    )
-    return response
-
+# Secure cookie работает только по HTTPS.
+# В локальной разработке (http://127.0.0.1) флаг нужно отключить,
+# иначе браузер не будет отправлять cookie и вход сломается.
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("FLASK_ENV") == "production"
+app.config["REMEMBER_COOKIE_SECURE"] = os.environ.get("FLASK_ENV") == "production"
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
