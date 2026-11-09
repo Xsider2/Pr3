@@ -1,18 +1,38 @@
 {% extends "base.html" %}
 {% block title %}Повторная отправка кода{% endblock %}
-{% block content %}
-<div class="card shadow-sm">
-  <div class="card-body p-4">
-    <h2 class="card-title mb-3 text-center">Отправить код повторно</h2>
-    <form method="post" novalidate>
-      {{ form.hidden_tag() }}
-      <div class="mb-3">
-        {{ form.email.label(class="form-label") }}
-        {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else "")) }}
-        {% for error in form.email.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
-      </div>
-      {{ form.submit(class="btn btn-primary w-100") }}
-    </form>
-  </div>
+{% block layout %}
+<div class="auth">
+    <aside class="auth__aside">
+        <a class="logo" href="{{ url_for('index') }}">
+            <span id="logo-mark"></span>
+            <span class="logo__text">
+                <span class="logo__title">Smart Study</span>
+                <span class="logo__sub">учебный портал</span>
+            </span>
+        </a>
+        <div>
+            <div class="auth__brandline">повторная отправка</div>
+            <h1 class="auth__headline">Новый код —<br><em>за минуту</em></h1>
+            <p class="auth__lead">Укажите адрес, на который регистрировались. Мы отправим новый код, если аккаунт ещё ждёт подтверждения.</p>
+        </div>
+        <p class="auth__foot">Не более 5 запросов в час с одного адреса</p>
+    </aside>
+    <div class="auth__panel">
+        <div class="auth__card">
+            {% include "_flashes.html" %}
+            <h1>Отправить код повторно</h1>
+            <p class="sub">Введите учебную почту</p>
+            <form method="post" novalidate>
+                {{ form.hidden_tag() }}
+                <div class="field {% if form.email.errors %}field--error{% endif %}">
+                    {{ form.email.label }}
+                    {{ form.email(class="input", placeholder="student@example.ru", autocomplete="email") }}
+                    {% for error in form.email.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+                </div>
+                <button type="submit" class="btn btn--primary btn--block">Отправить код</button>
+            </form>
+            <p class="auth__switch"><a href="{{ url_for('login') }}">Вернуться к входу</a></p>
+        </div>
+    </div>
 </div>
 {% endblock %}

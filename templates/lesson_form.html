@@ -1,0 +1,70 @@
+{% extends "app_base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_sub %}Расписание с учётом чётности недели{% endblock %}
+{% block content %}
+
+<div class="card" style="max-width:680px;">
+    <form method="post" novalidate>
+        {{ form.hidden_tag() }}
+
+        <div class="field {% if form.subject.errors %}field--error{% endif %}">
+            {{ form.subject.label }}
+            {{ form.subject(class="input", placeholder="Например, анатомия человека") }}
+            {% for error in form.subject.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+        </div>
+
+        <div class="form-row">
+            <div class="field">
+                {{ form.weekday.label }}
+                {{ form.weekday(class="input") }}
+            </div>
+            <div class="field">
+                {{ form.kind.label }}
+                {{ form.kind(class="input") }}
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="field {% if form.start_time.errors %}field--error{% endif %}">
+                {{ form.start_time.label }}
+                {{ form.start_time(class="input", type="time") }}
+                {% for error in form.start_time.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+            </div>
+            <div class="field">
+                {{ form.end_time.label }}
+                {{ form.end_time(class="input", type="time") }}
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="field">
+                {{ form.room.label }}
+                {{ form.room(class="input", placeholder="101") }}
+            </div>
+            <div class="field">
+                {{ form.parity.label }}
+                {{ form.parity(class="input") }}
+            </div>
+        </div>
+
+        <div class="field">
+            {{ form.teacher.label }}
+            {{ form.teacher(class="input", placeholder="Иванова М. С.") }}
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn--primary">{{ "Сохранить изменения" if mode == "edit" else "Добавить занятие" }}</button>
+            <a class="btn btn--ghost" href="{{ url_for('schedule') }}">Отмена</a>
+            {% if mode == "edit" and lesson %}
+            <button type="submit" class="btn btn--danger" form="deleteLesson">Удалить</button>
+            {% endif %}
+        </div>
+    </form>
+    {% if mode == "edit" and lesson %}
+    <form id="deleteLesson" method="post" action="{{ url_for('lesson_delete', lesson_id=lesson.id) }}" data-confirm="Удалить занятие «{{ lesson.subject }}»?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

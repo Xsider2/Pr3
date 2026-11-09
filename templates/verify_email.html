@@ -1,20 +1,38 @@
 {% extends "base.html" %}
 {% block title %}Подтверждение почты{% endblock %}
-{% block content %}
-<div class="card shadow-sm">
-  <div class="card-body p-4">
-    <h2 class="card-title mb-3 text-center">Подтверждение почты</h2>
-    <p>На адрес <strong>{{ email }}</strong> отправлен шестизначный код. Он действует 10 минут.</p>
-    <form method="post" novalidate>
-      {{ form.hidden_tag() }}
-      <div class="mb-3">
-        {{ form.code.label(class="form-label") }}
-        {{ form.code(class="form-control" + (" is-invalid" if form.code.errors else ""), inputmode="numeric", autocomplete="one-time-code", maxlength="6") }}
-        {% for error in form.code.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
-      </div>
-      {{ form.submit(class="btn btn-primary w-100") }}
-    </form>
-    <p class="text-center mt-3 mb-0"><a href="{{ url_for('resend_verification') }}">Отправить код повторно</a></p>
-  </div>
+{% block layout %}
+<div class="auth">
+    <aside class="auth__aside">
+        <a class="logo" href="{{ url_for('index') }}">
+            <span id="logo-mark"></span>
+            <span class="logo__text">
+                <span class="logo__title">Smart Study</span>
+                <span class="logo__sub">учебный портал</span>
+            </span>
+        </a>
+        <div>
+            <div class="auth__brandline">безопасность</div>
+            <h1 class="auth__headline">Остался один<br><em>код</em></h1>
+            <p class="auth__lead">Письмо с шестизначным кодом уже отправлено. Он действует 10 минут и подходит только для одного подтверждения.</p>
+        </div>
+        <p class="auth__foot">Никому не передавайте код — его запрашивает только портал</p>
+    </aside>
+    <div class="auth__panel">
+        <div class="auth__card">
+            {% include "_flashes.html" %}
+            <h1>Подтверждение почты</h1>
+            <p class="sub">Код отправлен на <strong>{{ email }}</strong>. Он действует 10 минут.</p>
+            <form method="post" novalidate>
+                {{ form.hidden_tag() }}
+                <div class="field {% if form.code.errors %}field--error{% endif %}">
+                    {{ form.code.label }}
+                    {{ form.code(class="input", inputmode="numeric", autocomplete="one-time-code", maxlength="6", placeholder="000000", style="letter-spacing:.4em;text-align:center;font-size:1.2rem") }}
+                    {% for error in form.code.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+                </div>
+                <button type="submit" class="btn btn--primary btn--block">Подтвердить email</button>
+            </form>
+            <p class="auth__switch"><a href="{{ url_for('resend_verification') }}">Отправить код повторно</a></p>
+        </div>
+    </div>
 </div>
 {% endblock %}

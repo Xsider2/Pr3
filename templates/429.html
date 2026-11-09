@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Слишком много запросов{% endblock %}
-{% block content %}
-<div class="card shadow-sm border-warning">
-    <div class="card-body p-4 text-center">
-        <h2 class="card-title text-warning mb-3">⏱ Слишком много запросов</h2>
-        <p class="mb-4">Вы сделали слишком много попыток за короткое время. Пожалуйста, подождите минуту и попробуйте снова.</p>
-        <a href="{{ url_for('index') }}" class="btn btn-primary">На главную</a>
+{% block layout %}
+<div class="auth__panel" style="min-height:100vh;">
+    <div class="auth__card" style="text-align:center;">
+        <h1 style="color:var(--wine-900);">Слишком много запросов</h1>
+        <p class="sub" style="margin-bottom:1.4rem;">Вы сделали слишком много попыток за короткое время. Подождите минуту и попробуйте снова.</p>
+        <a href="{{ url_for('index') }}" class="btn btn--primary">На главную</a>
     </div>
 </div>
 {% endblock %}

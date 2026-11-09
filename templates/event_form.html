@@ -1,0 +1,89 @@
+{% extends "app_base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_sub %}Мероприятие сохраняется в вашем личном кабинете{% endblock %}
+{% block content %}
+
+<div class="grid grid--sidebar">
+    <div class="card">
+        <form method="post" novalidate>
+            {{ form.hidden_tag() }}
+
+            <div class="field {% if form.title.errors %}field--error{% endif %}">
+                {{ form.title.label }}
+                {{ form.title(class="input", placeholder="Например, контрольная по фармакологии") }}
+                {% for error in form.title.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="form-row">
+                <div class="field {% if form.kind.errors %}field--error{% endif %}">
+                    {{ form.kind.label }}
+                    {{ form.kind(class="input") }}
+                </div>
+                <div class="field {% if form.status.errors %}field--error{% endif %}">
+                    {{ form.status.label }}
+                    {{ form.status(class="input") }}
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="field {% if form.event_date.errors %}field--error{% endif %}">
+                    {{ form.event_date.label }}
+                    {{ form.event_date(class="input", type="date") }}
+                    {% for error in form.event_date.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="field">
+                    {{ form.location.label }}
+                    {{ form.location(class="input", placeholder="Аудитория или адрес") }}
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="field">
+                    {{ form.start_time.label }}
+                    {{ form.start_time(class="input", type="time") }}
+                </div>
+                <div class="field">
+                    {{ form.end_time.label }}
+                    {{ form.end_time(class="input", type="time") }}
+                </div>
+            </div>
+
+            <div class="field">
+                {{ form.description.label }}
+                {{ form.description(class="input", rows="4", placeholder="Что взять, с кем связаться, что подготовить") }}
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary">{{ "Сохранить изменения" if mode == "edit" else "Добавить мероприятие" }}</button>
+                <a class="btn btn--ghost" href="{{ url_for('events') }}">Отмена</a>
+                {% if mode == "edit" and item %}
+                <button type="submit" class="btn btn--danger" form="deleteForm">Удалить</button>
+                {% endif %}
+            </div>
+        </form>
+        {% if mode == "edit" and item %}
+        <form id="deleteForm" method="post" action="{{ url_for('event_delete', event_id=item.id) }}" data-confirm="Удалить мероприятие «{{ item.title }}»?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        </form>
+        {% endif %}
+    </div>
+
+    <div class="stack">
+        <div class="card">
+            <div class="card__head"><h3>Подсказка</h3></div>
+            <p class="small muted" style="margin:0;">Дата и время показываются в расписании на текущую неделю. Статус «Выполнено» учитывается в статистике на главной.</p>
+        </div>
+        {% if mode == "edit" and item %}
+        <div class="card">
+            <div class="card__head"><h3>Запись</h3></div>
+            <dl class="kv">
+                <dt>Создано</dt><dd>{{ item.created_at.strftime("%d.%m.%Y %H:%M") }}</dd>
+                <dt>Обновлено</dt><dd>{{ item.updated_at.strftime("%d.%m.%Y %H:%M") if item.updated_at else "—" }}</dd>
+                <dt>Тип</dt><dd>{{ item.kind_label }}</dd>
+            </dl>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

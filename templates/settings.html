@@ -1,0 +1,149 @@
+{% extends "app_base.html" %}
+{% block title %}Настройки{% endblock %}
+{% block page_title %}Настройки{% endblock %}
+{% block page_sub %}Интерфейс, безопасность и Moodle{% endblock %}
+{% block content %}
+
+<div class="tabs">
+    <a class="tab is-active" href="#general">Общие</a>
+    <a class="tab" href="#security">Данные и пароль</a>
+    <a class="tab" href="#moodle">Moodle</a>
+</div>
+
+<div class="grid grid--2">
+    <div class="card" id="general">
+        <div class="card__head"><h2>Общие настройки</h2></div>
+        <form method="post" novalidate>
+            {{ settings_form.hidden_tag() }}
+            <input type="hidden" name="action" value="general">
+
+            <div class="form-row">
+                <div class="field">
+                    {{ settings_form.theme.label }}
+                    {{ settings_form.theme(class="input") }}
+                </div>
+                <div class="field">
+                    {{ settings_form.first_week_parity.label }}
+                    {{ settings_form.first_week_parity(class="input") }}
+                </div>
+            </div>
+
+            <div class="switch-row">
+                <div class="switch-row__text">
+                    <strong>Показывать нечётные недели</strong>
+                    <small>Нечётные недели отображаются в расписании наравне с чётными</small>
+                </div>
+                <label class="switch">
+                    {{ settings_form.show_odd_weeks() }}
+                    <span></span>
+                </label>
+            </div>
+
+            <div class="switch-row">
+                <div class="switch-row__text">
+                    <strong>Напоминать о мероприятиях</strong>
+                    <small>Выделять ближайшие события на главной</small>
+                </div>
+                <label class="switch">
+                    {{ settings_form.notify_events() }}
+                    <span></span>
+                </label>
+            </div>
+
+            <div class="switch-row">
+                <div class="switch-row__text">
+                    <strong>Сообщать о новых оценках</strong>
+                    <small>Показывать средний балл и предупреждения</small>
+                </div>
+                <label class="switch">
+                    {{ settings_form.notify_grades() }}
+                    <span></span>
+                </label>
+            </div>
+
+            <div class="switch-row">
+                <div class="switch-row__text">
+                    <strong>Компактное расписание</strong>
+                    <small>Меньше отступов между парами</small>
+                </div>
+                <label class="switch">
+                    {{ settings_form.compact_schedule() }}
+                    <span></span>
+                </label>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary">Сохранить настройки</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="stack" id="security">
+        <div class="card">
+            <div class="card__head"><h2>Смена данных входа</h2></div>
+            <form method="post" novalidate style="margin-bottom:1.3rem;">
+                {{ email_form.hidden_tag() }}
+                <input type="hidden" name="action" value="email">
+                <div class="field {% if email_form.email.errors %}field--error{% endif %}">
+                    {{ email_form.email.label }}
+                    {{ email_form.email(class="input", value=current_user.email) }}
+                    {% for error in email_form.email.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+                </div>
+                <div class="field {% if email_form.password.errors %}field--error{% endif %}">
+                    {{ email_form.password.label }}
+                    {{ email_form.password(class="input", placeholder="Подтвердите паролем") }}
+                    {% for error in email_form.password.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+                </div>
+                <button type="submit" class="btn btn--ghost">Изменить email</button>
+            </form>
+
+            <form method="post" novalidate>
+                {{ password_form.hidden_tag() }}
+                <input type="hidden" name="action" value="password">
+                <div class="field {% if password_form.current.errors %}field--error{% endif %}">
+                    {{ password_form.current.label }}
+                    {{ password_form.current(class="input", placeholder="Текущий пароль") }}
+                </div>
+                <div class="form-row">
+                    <div class="field {% if password_form.password.errors %}field--error{% endif %}">
+                        {{ password_form.password.label }}
+                        {{ password_form.password(class="input", placeholder="Минимум 8 символов") }}
+                        {% for error in password_form.password.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+                    </div>
+                    <div class="field {% if password_form.confirm.errors %}field--error{% endif %}">
+                        {{ password_form.confirm.label }}
+                        {{ password_form.confirm(class="input", placeholder="Повторите") }}
+                        {% for error in password_form.confirm.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
+                    </div>
+                </div>
+                <button type="submit" class="btn btn--ghost">Изменить пароль</button>
+            </form>
+        </div>
+
+        <div class="card" id="moodle">
+            <div class="card__head">
+                <h2>Связка с Moodle</h2>
+                {% if settings and current_user.profile and current_user.profile.moodle_url and current_user.profile.moodle_token %}
+                <span class="badge badge--olymp">подключено</span>
+                {% else %}
+                <span class="badge badge--other">не подключено</span>
+                {% endif %}
+            </div>
+            <form method="post" novalidate>
+                {{ moodle_form.hidden_tag() }}
+                <input type="hidden" name="action" value="moodle">
+                <div class="field">
+                    {{ moodle_form.moodle_url.label }}
+                    {{ moodle_form.moodle_url(class="input", placeholder="https://moodle.institute.ru") }}
+                </div>
+                <div class="field">
+                    {{ moodle_form.moodle_token.label }}
+                    {{ moodle_form.moodle_token(class="input", placeholder="Токен веб-сервиса Moodle") }}
+                    <div class="hint">Токен хранится в профиле и не отображается другим пользователям.</div>
+                </div>
+                <button type="submit" class="btn btn--ghost">Сохранить связку</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,17 +1,17 @@
 {% extends "base.html" %}
-{% block title %}Главная{% endblock %}
-{% block content %}
-<div class="text-center py-5">
-    <h1 class="display-5 mb-3">Добро пожаловать!</h1>
-    {% if current_user.is_authenticated %}
-    <p class="lead">Вы вошли как <strong>{{ current_user.email }}</strong>.</p>
-    <a href="{{ url_for('profile') }}" class="btn btn-primary btn-lg mt-3">Перейти в профиль</a>
-    {% else %}
-    <p class="lead">Пожалуйста, войдите или зарегистрируйтесь, чтобы продолжить.</p>
-    <div class="mt-4">
-        <a href="{{ url_for('login') }}" class="btn btn-primary btn-lg me-2">Войти</a>
-        <a href="{{ url_for('register') }}" class="btn btn-outline-secondary btn-lg">Зарегистрироваться</a>
+{% block title %}Smart Study{% endblock %}
+{% block layout %}
+<div class="auth" style="grid-template-columns:1fr;">
+    <div class="auth__panel" style="min-height:100vh;">
+        <div class="auth__card" style="max-width:560px;text-align:center;">
+            <div style="display:flex;justify-content:center;margin-bottom:1rem;"><span id="logo-mark"></span></div>
+            <h1 style="font-size:1.9rem;">Smart Study</h1>
+            <p class="sub">Учебный портал: расписание по чётным и нечётным неделям, мероприятия, календарь, успеваемость и связка с Moodle.</p>
+            <div style="display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap;margin-top:1.4rem;">
+                <a href="{{ url_for('login') }}" class="btn btn--primary">Войти</a>
+                <a href="{{ url_for('register') }}" class="btn btn--ghost">Зарегистрироваться</a>
+            </div>
+        </div>
     </div>
-    {% endif %}
 </div>
 {% endblock %}

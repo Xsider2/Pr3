@@ -1,0 +1,111 @@
+{% extends "app_base.html" %}
+{% block title %}Главная{% endblock %}
+{% block page_title %}Главная{% endblock %}
+{% block page_sub %}{{ today.strftime("%d.%m.%Y") }} · {{ parity_text }} неделя{% endblock %}
+{% block content %}
+
+<section class="hero">
+    <div class="auth__brandline" style="color:var(--gold-400);">личный кабинет</div>
+    <h2>Привет, {{ profile.full_name or current_user.display_name }}!</h2>
+    <p>Сегодня {{ parity_text }} неделя. {% if lessons_today %}Пар сегодня: {{ lessons_today|length }}.{% else %}Пар по расписанию на сегодня нет.{% endif %}
+       {% if events %}Ближайшее мероприятие — {{ events[0].title }} ({{ events[0].event_date.strftime("%d.%m") }}).{% endif %}</p>
+    <div class="hero__row">
+        <a class="btn btn--gold" href="{{ url_for('event_create') }}">+ Добавить мероприятие</a>
+        <a class="btn btn--ghost" href="{{ url_for('schedule') }}">Открыть расписание</a>
+        <a class="btn btn--ghost" href="{{ url_for('calendar_view') }}">Календарь</a>
+    </div>
+</section>
+
+<div class="grid grid--3" style="margin-bottom:1.2rem;">
+    <div class="stat stat--gold">
+        <div class="stat__label">Средний балл</div>
+        <div class="stat__value">{{ average if average is not none else "—" }} <small>/ 5.0</small></div>
+        <div class="small muted">оценок в журнале: {{ grades_count }}</div>
+    </div>
+    <div class="stat">
+        <div class="stat__label">Мероприятия</div>
+        <div class="stat__value">{{ events_count }} <small>всего</small></div>
+        <div class="small muted">выполнено: {{ done_events }}</div>
+    </div>
+    <div class="stat">
+        <div class="stat__label">Пары сегодня</div>
+        <div class="stat__value">{{ lessons_today|length }}</div>
+        <div class="small muted">{{ parity_text }} неделя</div>
+    </div>
+</div>
+
+<div class="grid grid--sidebar">
+    <div class="card card--flush">
+        <div class="card__head" style="padding:1.2rem 1.2rem 0;">
+            <h2>Ближайшие мероприятия</h2>
+            <a class="btn btn--ghost btn--sm" href="{{ url_for('events') }}">Все</a>
+        </div>
+        {% if events %}
+            {% for item in events %}
+            <article class="event">
+                <div class="event__date">
+                    <b>{{ item.event_date.strftime("%d") }}</b>
+                    <span>{{ item.event_date.strftime("%m.%y") }}</span>
+                </div>
+                <div class="event__body">
+                    <h4>{{ item.title }}</h4>
+                    <div class="event__meta">
+                        <span class="badge badge--{{ item.kind }}">{{ item.kind_label }}</span>
+                        <span>{{ item.time_label }}</span>
+                        {% if item.location %}<span>{{ item.location }}</span>{% endif %}
+                    </div>
+                    {% if item.description %}<p class="event__desc">{{ item.description|truncate(140) }}</p>{% endif %}
+                </div>
+                <div class="event__actions">
+                    <a class="btn btn--ghost btn--sm" href="{{ url_for('event_edit', event_id=item.id) }}">Изменить</a>
+                </div>
+            </article>
+            {% endfor %}
+        {% else %}
+            <div class="empty">
+                <strong>Пока ничего не запланировано</strong>
+                Добавьте первое мероприятие — оно появится здесь и в расписании.
+                <div style="margin-top:1rem;"><a class="btn btn--primary" href="{{ url_for('event_create') }}">Добавить мероприятие</a></div>
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="stack">
+        <div class="card">
+            <div class="card__head"><h3>Расписание на сегодня</h3></div>
+            {% if lessons_today %}
+                {% for lesson in lessons_today %}
+                <div style="padding:.55rem 0;border-bottom:1px solid rgba(76,43,41,.07);">
+                    <div class="small" style="color:var(--wine-800);font-weight:700;">{{ lesson.time_label }}</div>
+                    <div style="font-weight:600;">{{ lesson.subject }}</div>
+                    <div class="small muted">{{ lesson.room or "—" }} · {{ lesson.teacher or "преподаватель не указан" }}</div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="small muted" style="margin:0;">Пар нет. Хорошее время для заметок и подготовки.</p>
+            {% endif %}
+            <a class="btn btn--ghost btn--sm" style="margin-top:.9rem;" href="{{ url_for('schedule') }}">Всё расписание</a>
+        </div>
+
+        <div class="card">
+            <div class="card__head"><h3>Быстрые ссылки</h3></div>
+            <div class="stack">
+                <a class="navlink" style="background:rgba(251,230,211,.55);color:var(--wine-800);" href="{{ url_for('grades') }}">Успеваемость</a>
+                <a class="navlink" style="background:rgba(251,230,211,.55);color:var(--wine-800);" href="{{ url_for('profile') }}">Профиль</a>
+                <a class="navlink" style="background:rgba(251,230,211,.55);color:var(--wine-800);" href="{{ url_for('settings') }}">Настройки</a>
+            </div>
+        </div>
+
+        {% if past_events %}
+        <div class="card">
+            <div class="card__head"><h3>Прошедшие</h3></div>
+            {% for item in past_events %}
+            <div class="small" style="padding:.4rem 0;border-bottom:1px solid rgba(76,43,41,.06);">
+                <span class="muted">{{ item.event_date.strftime("%d.%m") }}</span> — {{ item.title }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
