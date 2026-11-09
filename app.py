@@ -16,16 +16,23 @@ load_dotenv()  # читает .env и кладёт переменные в os.en
 
 app = Flask(__name__)
 
-DB_USER = os.environ["DB_USER"]
-DB_PASSWORD = os.environ["DB_PASSWORD"]
-DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
-DB_PORT = os.environ.get("DB_PORT", "3306")
-DB_NAME = os.environ["DB_NAME"]
+# Для тестов можно задать DATABASE_URL (например, sqlite:///test.db),
+# тогда MySQL не нужен. Без этой переменной подключение собирается из DB_* как раньше.
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-app.config["SQLALCHEMY_DATABASE_URI"] = (
-    f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    "?charset=utf8mb4"
-)
+if DATABASE_URL:
+    app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
+else:
+    DB_USER = os.environ["DB_USER"]
+    DB_PASSWORD = os.environ["DB_PASSWORD"]
+    DB_HOST = os.environ.get("DB_HOST", "127.0.0.1")
+    DB_PORT = os.environ.get("DB_PORT", "3306")
+    DB_NAME = os.environ["DB_NAME"]
+
+    app.config["SQLALCHEMY_DATABASE_URI"] = (
+        f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+        "?charset=utf8mb4"
+    )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
 
