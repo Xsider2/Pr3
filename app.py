@@ -2,11 +2,13 @@ from flask import Flask, render_template, redirect, url_for, flash, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_wtf import FlaskForm
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, CSRFError
 from wtforms import (StringField, PasswordField, SubmitField, TextAreaField, SelectField,
                      DateField, TimeField, BooleanField, IntegerField)
-from wtforms.validators import DataRequired, Email, Length, EqualTo, Optional, NumberRange
-from datetime import datetime, timedelta, date, time
+from wtforms.validators import (DataRequired, Email, Length, EqualTo, Optional, NumberRange,
+                                ValidationError)
+from datetime import datetime, timedelta, date, time, timezone
+import base64
 import hashlib
 import hmac
 import secrets
@@ -19,6 +21,9 @@ from flask_limiter.util import get_remote_address
 import gzip
 from sqlalchemy.exc import IntegrityError
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo
+from werkzeug.middleware.proxy_fix import ProxyFix
+from cryptography.fernet import Fernet, InvalidToken
 import calendar as pycalendar
 import os
 from dotenv import load_dotenv
@@ -89,6 +94,65 @@ else:
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
+
+# Ограничение размера запроса: защита от гигантских тел (заметки, формы).
+app.config["MAX_CONTENT_LENGTH"] = 1 * 1024 * 1024  # 1 МБ
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name, "").strip().lower()
+    if not value:
+        return default
+    return value in {"1", "true", "yes", "on"}
+
+
+IS_PRODUCTION = os.environ.get("FLASK_ENV", "").strip().lower() == "production"
+
+# За обратным прокси (nginx, Render и т. п.) IP клиента приходит в X-Forwarded-For.
+# Без этого лимитер видит один IP прокси для всех пользователей.
+# Включайте TRUST_PROXY=1 только если приложение действительно стоит за прокси.
+if _env_flag("TRUST_PROXY"):
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+
+# --- Время ---
+# В базе всё хранится в UTC (naive datetime), а «сегодня» и время для пользователя
+# считаются в часовом поясе приложения (APP_TIMEZONE, по умолчанию Москва).
+def _load_app_timezone():
+    name = os.environ.get("APP_TIMEZONE", "Europe/Moscow")
+    try:
+        return ZoneInfo(name)
+    except Exception:
+        # На Windows без пакета tzdata базы часовых поясов нет.
+        if name == "Europe/Moscow":
+            return timezone(timedelta(hours=3), name)
+        return timezone.utc
+
+
+APP_TZ = _load_app_timezone()
+
+
+def utcnow() -> datetime:
+    """Текущее UTC-время как naive datetime (замена устаревшему utcnow)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def now_local() -> datetime:
+    return datetime.now(APP_TZ)
+
+
+def today_local() -> date:
+    return now_local().date()
+
+
+def to_local(value):
+    """Переводит UTC-время из базы в часовой пояс приложения."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(APP_TZ)
+
 
 # --- Безопасность сессии и CSRF ---
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -178,9 +242,82 @@ login_manager.session_protection = "basic"
 limiter = Limiter(
     key_func=get_remote_address,  # Лимит по IP-адресу
     app=app,
-    default_limits=["200 per day", "50 per hour"],  # Общие лимиты для всего сайта
+    # Общие лимиты на IP. Чувствительные маршруты (вход, регистрация, коды) ограничены строже.
+    # Значения можно переопределить: RATELIMIT_DEFAULT="2000 per day;400 per hour".
+    default_limits=[part.strip() for part in
+                    os.environ.get("RATELIMIT_DEFAULT", "1000 per day;300 per hour").split(";")
+                    if part.strip()],
     storage_uri=os.environ.get("RATELIMIT_STORAGE_URI", "memory://"),  # Для нескольких workers задайте Redis.
 )
+
+
+# --- Фильтры шаблонов и настройки интерфейса ---
+MONTHS_SHORT = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
+UI_THEMES = {"sand", "wine", "navy"}
+
+
+@app.template_filter("ru_plural")
+def ru_plural(number, one, few, many):
+    """«1 пара», «2 пары», «5 пар»: число и правильная форма слова."""
+    n = abs(int(number))
+    if 11 <= n % 100 <= 14:
+        form = many
+    elif n % 10 == 1:
+        form = one
+    elif 2 <= n % 10 <= 4:
+        form = few
+    else:
+        form = many
+    return f"{n} {form}"
+
+
+@app.template_filter("ru_month")
+def ru_month(value):
+    return MONTHS_SHORT[value.month - 1]
+
+
+@app.template_filter("localdt")
+def localdt(value, fmt="%d.%m.%Y %H:%M"):
+    local = to_local(value)
+    return local.strftime(fmt) if local else "—"
+
+
+@app.context_processor
+def inject_ui_settings():
+    """Тема оформления и компактный режим из настроек пользователя."""
+    theme, compact = "sand", False
+    if current_user.is_authenticated:
+        user_settings = current_user.settings
+        if user_settings:
+            theme = user_settings.theme if user_settings.theme in UI_THEMES else "sand"
+            compact = bool(user_settings.compact_schedule)
+    return {"ui_theme": theme, "ui_compact": compact}
+
+
+# --- Шифрование токена Moodle ---
+TOKEN_PREFIX = "enc:v1:"
+MOODLE_TOKEN_MAX_LEN = 64  # токены Moodle — 32 символа; запас под шифртекст в колонке String(255)
+
+
+def _token_cipher() -> Fernet:
+    material = os.environ.get("MOODLE_TOKEN_KEY") or app.config["SECRET_KEY"]
+    digest = hashlib.sha256(("moodle-token:" + material).encode("utf-8")).digest()
+    return Fernet(base64.urlsafe_b64encode(digest))
+
+
+def encrypt_token(token: str) -> str:
+    return TOKEN_PREFIX + _token_cipher().encrypt(token.encode("utf-8")).decode("ascii")
+
+
+def decrypt_token(stored):
+    if not stored:
+        return None
+    if not stored.startswith(TOKEN_PREFIX):
+        return stored  # старая запись, сохранённая до шифрования
+    try:
+        return _token_cipher().decrypt(stored[len(TOKEN_PREFIX):].encode("ascii")).decode("utf-8")
+    except InvalidToken:
+        return None
 
 
 # --- Модели данных ---
@@ -194,7 +331,7 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(256), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
     email_verified = db.Column(db.Boolean, nullable=False, default=False)
     email_verification_code_hash = db.Column(db.String(64), nullable=True)
     email_verification_expires_at = db.Column(db.DateTime, nullable=True)
@@ -213,6 +350,12 @@ class User(UserMixin, db.Model):
 
     def check_password(self, password: str) -> bool:
         return check_password_hash(self.password_hash, password)
+
+    def get_id(self) -> str:
+        # Идентификатор сессии привязан к текущему хешу пароля: после смены пароля
+        # все остальные сессии этого пользователя перестают действовать.
+        stamp = hashlib.sha256(self.password_hash.encode("utf-8")).hexdigest()[:16]
+        return f"{self.id}.{stamp}"
 
     @property
     def display_name(self) -> str:
@@ -258,9 +401,26 @@ class Profile(db.Model):
     moodle_url = db.Column(db.String(255), nullable=True)
     moodle_token = db.Column(db.String(255), nullable=True)
     bio = db.Column(db.Text, nullable=True)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
 
     user = db.relationship("User", back_populates="profile")
+
+    @property
+    def moodle_connected(self) -> bool:
+        return bool(self.moodle_url and self.moodle_token)
+
+    @property
+    def moodle_token_plain(self):
+        return decrypt_token(self.moodle_token)
+
+    @property
+    def moodle_token_hint(self) -> str:
+        """Последние 4 символа токена для показа в интерфейсе."""
+        plain = self.moodle_token_plain or ""
+        return plain[-4:] if len(plain) > 4 else ""
+
+    def set_moodle_token(self, token) -> None:
+        self.moodle_token = encrypt_token(token) if token else None
 
 
 class UserSettings(db.Model):
@@ -311,8 +471,8 @@ class Event(db.Model):
     start_time = db.Column(db.Time, nullable=True)
     end_time = db.Column(db.Time, nullable=True)
     status = db.Column(db.String(20), nullable=False, default="planned")
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
 
     user = db.relationship("User", back_populates="events")
 
@@ -388,15 +548,23 @@ class Grade(db.Model):
     value = db.Column(db.Integer, nullable=False)
     weight = db.Column(db.Integer, nullable=False, default=1)
     control = db.Column(db.String(120), nullable=True)
-    graded_on = db.Column(db.Date, nullable=False, default=date.today)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    graded_on = db.Column(db.Date, nullable=False, default=today_local)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     user = db.relationship("User", back_populates="grades")
 
 
 @login_manager.user_loader
 def load_user(user_id):
-    return db.session.get(User, int(user_id))
+    raw_id, _, stamp = str(user_id).partition(".")
+    try:
+        user = db.session.get(User, int(raw_id))
+    except ValueError:
+        return None
+    if user is None or not stamp:
+        return None
+    expected = user.get_id().partition(".")[2]
+    return user if hmac.compare_digest(stamp, expected) else None
 
 
 def is_safe_next(target):
@@ -414,8 +582,13 @@ def is_safe_next(target):
 
 
 # --- Формы ---
+def _strip(value):
+    """Фильтр WTForms: убирает пробелы по краям (их часто добавляет автодополнение)."""
+    return value.strip() if isinstance(value, str) else value
+
+
 class RegisterForm(FlaskForm):
-    email = StringField("Email", validators=[DataRequired(), Email(), Length(max=120)])
+    email = StringField("Email", filters=[_strip], validators=[DataRequired(), Email(), Length(max=120)])
     password = PasswordField("Пароль", validators=[DataRequired(), Length(min=8, max=128)])
     confirm = PasswordField("Повторите пароль", validators=[DataRequired(), EqualTo("password", message="Пароли не совпадают")])
     submit = SubmitField("Зарегистрироваться")
@@ -427,12 +600,12 @@ class VerifyEmailForm(FlaskForm):
 
 
 class ResendVerificationForm(FlaskForm):
-    email = StringField("Email", validators=[DataRequired(), Email(), Length(max=120)])
+    email = StringField("Email", filters=[_strip], validators=[DataRequired(), Email(), Length(max=120)])
     submit = SubmitField("Отправить код")
 
 
 class LoginForm(FlaskForm):
-    email = StringField("Email", validators=[DataRequired(), Email()])
+    email = StringField("Email", filters=[_strip], validators=[DataRequired(), Email()])
     password = PasswordField("Пароль", validators=[DataRequired()])
     submit = SubmitField("Войти")
 
@@ -458,7 +631,7 @@ class SettingsForm(FlaskForm):
 
 
 class EmailForm(FlaskForm):
-    email = StringField("Новый email", validators=[DataRequired(), Email(), Length(max=120)])
+    email = StringField("Новый email", filters=[_strip], validators=[DataRequired(), Email(), Length(max=120)])
     password = PasswordField("Текущий пароль", validators=[DataRequired()])
     submit = SubmitField("Изменить email")
 
@@ -472,8 +645,29 @@ class PasswordForm(FlaskForm):
 
 class MoodleForm(FlaskForm):
     moodle_url = StringField("Адрес Moodle", validators=[Optional(), Length(max=255)])
-    moodle_token = StringField("Токен доступа", validators=[Optional(), Length(max=255)])
+    # PasswordField никогда не выводит сохранённое значение обратно в HTML.
+    moodle_token = PasswordField("Токен доступа",
+                                 validators=[Optional(), Length(max=MOODLE_TOKEN_MAX_LEN)])
     submit = SubmitField("Сохранить связку")
+    disconnect = SubmitField("Отключить")
+
+    def validate_moodle_url(self, field):
+        value = (field.data or "").strip()
+        if not value:
+            return
+        parts = urlsplit(value)
+        if parts.scheme != "https" or not parts.hostname or parts.username or parts.password:
+            raise ValidationError("Укажите адрес вида https://moodle.institute.ru")
+
+
+def _check_time_order(form, field):
+    """Окончание не может быть раньше (или равно) началу."""
+    if not field.data:
+        return
+    if not form.start_time.data:
+        raise ValidationError("Сначала укажите время начала.")
+    if field.data <= form.start_time.data:
+        raise ValidationError("Окончание должно быть позже начала.")
 
 
 class EventForm(FlaskForm):
@@ -487,6 +681,9 @@ class EventForm(FlaskForm):
     description = TextAreaField("Описание", validators=[Optional(), Length(max=2000)])
     submit = SubmitField("Сохранить")
 
+    def validate_end_time(self, field):
+        _check_time_order(self, field)
+
 
 class LessonForm(FlaskForm):
     subject = StringField("Дисциплина", validators=[DataRequired(), Length(max=160)])
@@ -498,6 +695,9 @@ class LessonForm(FlaskForm):
     parity = SelectField("Чётность недели", choices=[(k, v) for k, v in PARITY_LABELS.items()])
     kind = SelectField("Тип занятия", choices=[(k, v) for k, v in LESSON_KINDS.items()])
     submit = SubmitField("Сохранить")
+
+    def validate_end_time(self, field):
+        _check_time_order(self, field)
 
 
 class GradeForm(FlaskForm):
@@ -520,7 +720,12 @@ def send_verification_email(user, code):
     use_tls = os.environ.get("SMTP_USE_TLS", "1").strip().lower() in {"1", "true", "yes", "on"}
 
     if not host or not sender:
-        raise RuntimeError("SMTP_HOST и SMTP_FROM (или SMTP_USER) должны быть настроены")
+        if IS_PRODUCTION:
+            raise RuntimeError("SMTP_HOST и SMTP_FROM (или SMTP_USER) должны быть настроены")
+        # Режим разработки: почта не настроена, код выводится в консоль сервера,
+        # чтобы можно было пройти регистрацию локально.
+        app.logger.warning("DEV: SMTP не настроен. Код подтверждения для %s: %s", user.email, code)
+        return
 
     message = EmailMessage()
     message["Subject"] = "Код подтверждения электронной почты"
@@ -551,31 +756,59 @@ def send_verification_email(user, code):
 def create_and_send_verification_code(user):
     code = f"{secrets.randbelow(1_000_000):06d}"
     user.email_verification_code_hash = hashlib.sha256(code.encode("utf-8")).hexdigest()
-    user.email_verification_expires_at = datetime.utcnow() + timedelta(minutes=10)
-    user.email_verification_last_sent_at = datetime.utcnow()
+    user.email_verification_expires_at = utcnow() + timedelta(minutes=10)
+    user.email_verification_last_sent_at = utcnow()
     db.session.commit()
     send_verification_email(user, code)
 
 
 # --- Вспомогательные функции расписания ---
+def _load_semester_start() -> date:
+    raw = os.environ.get("SEMESTER_START", "2026-09-01")
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return date(2026, 9, 1)
+
+
+# Дата начала семестра (SEMESTER_START=ГГГГ-ММ-ДД в .env). Недели считаются с понедельника,
+# поэтому точкой отсчёта берётся понедельник той недели, на которую попадает эта дата.
+SEMESTER_START = _load_semester_start()
+
+
 def week_parity_on(day: date, first_parity: str) -> str:
     """Чётность недели для конкретной даты относительно начала семестра.
 
-    Точкой отсчёта служит понедельник текущей ISO-недели даты создания аккаунта
-    (условное начало семестра), затем считается число недель между датами.
+    Неделя всегда идёт с понедельника по воскресенье, поэтому все семь дней одной
+    недели получают одну и ту же чётность. Первая неделя семестра имеет чётность
+    first_parity («even» или «odd»).
     """
     return "even" if _week_index(day, first_parity) % 2 == 0 else "odd"
 
 
-SEMESTER_START = date(2026, 9, 1)
-
-
 def _week_index(day: date, first_parity: str = "even") -> int:
-    delta_days = (day - SEMESTER_START).days
-    idx = delta_days // 7
+    start_monday = SEMESTER_START - timedelta(days=SEMESTER_START.weekday())
+    idx = (day - start_monday).days // 7  # целочисленное деление; до начала семестра < 0
     if first_parity == "odd":
         idx += 1
-    return max(idx, 0)
+    return idx
+
+
+def lesson_visible(lesson, parity: str, user_settings) -> bool:
+    """Показывать ли занятие в неделе с данной чётностью с учётом настроек."""
+    if lesson.parity not in ("all", parity):
+        return False
+    if lesson.parity == "odd" and not user_settings.show_odd_weeks:
+        return False
+    return True
+
+
+def weighted_average(grades):
+    """Средний балл с учётом веса работ (используется везде одинаково)."""
+    total_weight = sum((g.weight or 1) for g in grades)
+    if not total_weight:
+        return None
+    return round(sum(g.value * (g.weight or 1) for g in grades) / total_weight, 2)
 
 
 def parity_label_for(day: date, first_parity: str) -> str:
@@ -583,6 +816,25 @@ def parity_label_for(day: date, first_parity: str) -> str:
 
 
 # --- Маршруты ---
+_DUMMY_PASSWORD_HASH = generate_password_hash("not-a-real-password")
+
+# Страницы, доступные вошедшему пользователю с неподтверждённой почтой.
+_UNVERIFIED_ALLOWED = {"verify_email", "resend_verification", "logout", "login", "register",
+                       "index", "static"}
+
+
+@app.before_request
+def require_verified_email():
+    """Пока почта не подтверждена, доступны только страницы подтверждения.
+
+    Нужно, чтобы смена email или старые сессии не давали обойти подтверждение.
+    """
+    if (current_user.is_authenticated and not current_user.email_verified
+            and request.endpoint and request.endpoint not in _UNVERIFIED_ALLOWED):
+        flash("Подтвердите электронную почту, чтобы продолжить.", "warning")
+        return redirect(url_for("verify_email", email=current_user.email))
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -593,15 +845,26 @@ def index():
 @limiter.limit("4 per minute", methods=["POST"])
 def register():
     if current_user.is_authenticated:
-        return redirect(url_for("profile"))
+        return redirect(url_for("home"))
     form = RegisterForm()
     if form.validate_on_submit():
         email = form.email.data.strip().lower()
         existing = User.query.filter_by(email=email).first()
         if existing:
             if not existing.email_verified:
-                flash("Этот адрес уже зарегистрирован, но не подтверждён. Запросите новый код.", "warning")
-                return redirect(url_for("resend_verification", email=email))
+                # Аккаунт ещё не подтверждён: тот, кто регистрируется сейчас, задаёт пароль
+                # заново, а код уходит на почту. Старый пароль перезаписывается, иначе тот,
+                # кто занял чужой адрес первым, сохранил бы доступ после подтверждения.
+                existing.set_password(form.password.data)
+                db.session.commit()
+                try:
+                    create_and_send_verification_code(existing)
+                except Exception:
+                    app.logger.exception("Не удалось отправить код подтверждения")
+                    flash("Письмо отправить не удалось. Попробуйте запросить код повторно.", "warning")
+                    return redirect(url_for("resend_verification", email=email))
+                flash("Этот адрес ещё не подтверждён. Мы отправили новый код на почту.", "info")
+                return redirect(url_for("verify_email", email=email))
             flash("Пользователь с таким email уже существует.", "danger")
         else:
             user = User(email=email)
@@ -624,8 +887,14 @@ def register():
     return render_template("register.html", form=form)
 
 
+def _verify_email_key() -> str:
+    """Лимит попыток подбора кода считается ещё и по адресу почты, а не только по IP."""
+    return "verify:" + (request.args.get("email") or "").strip().lower()
+
+
 @app.route("/verify-email", methods=["GET", "POST"])
 @limiter.limit("5 per minute", methods=["POST"])
+@limiter.limit("10 per hour", methods=["POST"], key_func=_verify_email_key)
 def verify_email():
     email = request.args.get("email", "").strip().lower()
     user = User.query.filter_by(email=email).first() if email else None
@@ -642,7 +911,7 @@ def verify_email():
         code_hash = hashlib.sha256(code.encode("utf-8")).hexdigest()
         if (not user.email_verification_code_hash
                 or not user.email_verification_expires_at
-                or datetime.utcnow() > user.email_verification_expires_at
+                or utcnow() > user.email_verification_expires_at
                 or not hmac.compare_digest(code_hash, user.email_verification_code_hash)):
             flash("Неверный или просроченный код. Запросите новый код.", "danger")
         else:
@@ -679,18 +948,24 @@ def resend_verification():
 @limiter.limit("4 per minute", methods=["POST"])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for("profile"))
+        return redirect(url_for("home"))
     form = LoginForm()
     if form.validate_on_submit():
-        user = User.query.filter_by(email=form.email.data.lower()).first()
-        if user and user.check_password(form.password.data):
+        user = User.query.filter_by(email=form.email.data.strip().lower()).first()
+        if user:
+            password_ok = user.check_password(form.password.data)
+        else:
+            # Проверяем «пустой» хеш, чтобы время ответа не выдавало, есть ли такой email.
+            check_password_hash(_DUMMY_PASSWORD_HASH, form.password.data)
+            password_ok = False
+        if password_ok:
             if not user.email_verified:
                 flash("Сначала подтвердите электронную почту. При необходимости запросите новый код.", "warning")
                 return redirect(url_for("verify_email", email=user.email))
             login_user(user)
             flash("Вы вошли в аккаунт.", "success")
             next_page = request.args.get("next")
-            return redirect(next_page if is_safe_next(next_page) else url_for("profile"))
+            return redirect(next_page if is_safe_next(next_page) else url_for("home"))
         flash("Неверный email или пароль.", "danger")
     return render_template("login.html", form=form)
 
@@ -707,7 +982,7 @@ def logout():
 @app.route("/home")
 @login_required
 def home():
-    today = date.today()
+    today = today_local()
     settings = current_user.settings_or_create()
     parity = week_parity_on(today, settings.first_week_parity)
 
@@ -718,15 +993,17 @@ def home():
 
     lessons_today = (Lesson.query.filter_by(user_id=current_user.id, weekday=today.weekday())
                      .order_by(Lesson.start_time.asc()).all())
-    lessons_today = [l for l in lessons_today if l.parity in ("all", parity)]
+    lessons_today = [l for l in lessons_today if lesson_visible(l, parity, settings)]
 
     grades = Grade.query.filter_by(user_id=current_user.id).all()
-    average = round(sum(g.value for g in grades) / len(grades), 2) if grades else None
+    average = weighted_average(grades)
     done_events = len([e for e in events if e.status == "done"])
 
     return render_template(
         "home.html",
         events=upcoming,
+        notify_events=bool(settings.notify_events),
+        notify_grades=bool(settings.notify_grades),
         past_events=recent,
         lessons_today=lessons_today,
         parity=parity,
@@ -750,7 +1027,7 @@ def events():
         query = query.filter_by(kind=kind)
     items = query.order_by(Event.event_date.desc(), Event.start_time.desc()).all()
     return render_template("events.html", events=items, kinds=EVENT_KINDS,
-                           statuses=EVENT_STATUSES, active_kind=kind, today=date.today())
+                           statuses=EVENT_STATUSES, active_kind=kind, today=today_local())
 
 
 @app.route("/events/new", methods=["GET", "POST"])
@@ -758,7 +1035,7 @@ def events():
 def event_create():
     form = EventForm()
     if request.method == "GET":
-        form.event_date.data = date.today()
+        form.event_date.data = today_local()
     if form.validate_on_submit():
         item = Event(
             user_id=current_user.id,
@@ -827,7 +1104,7 @@ def profile():
         return redirect(url_for("profile"))
 
     grades = Grade.query.filter_by(user_id=current_user.id).order_by(Grade.graded_on.desc()).all()
-    average = round(sum(g.value for g in grades) / len(grades), 2) if grades else None
+    average = weighted_average(grades)
     events_count = Event.query.filter_by(user_id=current_user.id).count()
     lessons_count = Lesson.query.filter_by(user_id=current_user.id).count()
     return render_template("profile.html", form=form, profile=profile_obj, user=current_user,
@@ -867,40 +1144,58 @@ def settings():
             elif User.query.filter_by(email=new_email).first():
                 flash("Этот адрес уже занят другим аккаунтом.", "danger")
             else:
-                current_user.email = new_email
-                current_user.email_verified = False
+                user_obj = current_user._get_current_object()
+                user_obj.email = new_email
+                user_obj.email_verified = False
+                db.session.commit()
+                sent = True
                 try:
-                    db.session.commit()
-                    create_and_send_verification_code(current_user)
-                    flash("Адрес изменён. Подтвердите новый email кодом из письма.", "success")
-                    return redirect(url_for("verify_email", email=new_email))
+                    create_and_send_verification_code(user_obj)
                 except Exception:
-                    db.session.commit()
+                    sent = False
                     app.logger.exception("Не удалось отправить код на новый адрес")
-                    flash("Адрес изменён, но письмо отправить не удалось. Запросите код повторно.", "warning")
-                    return redirect(url_for("resend_verification"))
+                # Пока новый адрес не подтверждён, сессию завершаем: иначе подтверждение
+                # почты можно было бы обойти простой сменой адреса.
+                logout_user()
+                if sent:
+                    flash("Адрес изменён. Подтвердите новый email кодом из письма и войдите снова.", "success")
+                    return redirect(url_for("verify_email", email=new_email))
+                flash("Адрес изменён, но письмо отправить не удалось. Запросите код повторно.", "warning")
+                return redirect(url_for("resend_verification", email=new_email))
         return redirect(url_for("settings") + "#security")
 
     if action == "password" and password_form.validate_on_submit():
         if not current_user.check_password(password_form.current.data):
             flash("Текущий пароль указан неверно.", "danger")
         else:
-            current_user.set_password(password_form.password.data)
+            user_obj = current_user._get_current_object()
+            user_obj.set_password(password_form.password.data)
             db.session.commit()
-            flash("Пароль изменён.", "success")
+            # Идентификатор сессии зависит от хеша пароля: другие устройства выходят,
+            # а текущую сессию нужно выдать заново.
+            login_user(user_obj)
+            flash("Пароль изменён. На других устройствах потребуется войти заново.", "success")
         return redirect(url_for("settings") + "#security")
 
     if action == "moodle" and moodle_form.validate_on_submit():
         profile_obj = current_user.profile_or_create()
-        profile_obj.moodle_url = (moodle_form.moodle_url.data or "").strip() or None
-        profile_obj.moodle_token = (moodle_form.moodle_token.data or "").strip() or None
+        if moodle_form.disconnect.data:
+            profile_obj.moodle_url = None
+            profile_obj.moodle_token = None
+            flash("Moodle отключён, токен удалён.", "info")
+        else:
+            profile_obj.moodle_url = (moodle_form.moodle_url.data or "").strip() or None
+            new_token = (moodle_form.moodle_token.data or "").strip()
+            if new_token:  # пустое поле означает «оставить сохранённый токен»
+                profile_obj.set_moodle_token(new_token)
+            flash("Связка с Moodle сохранена.", "success")
         db.session.commit()
-        flash("Связка с Moodle сохранена.", "success")
         return redirect(url_for("settings") + "#moodle")
 
     return render_template("settings.html", settings_form=settings_form, email_form=email_form,
                            password_form=password_form, moodle_form=moodle_form,
-                           settings=settings_obj, user=current_user)
+                           settings=settings_obj, user=current_user,
+                           moodle_profile=current_user.profile_or_create())
 
 
 # --- Расписание ---
@@ -908,36 +1203,47 @@ def settings():
 @login_required
 def schedule():
     settings_obj = current_user.settings_or_create()
-    today = date.today()
+    today = today_local()
     parity = week_parity_on(today, settings_obj.first_week_parity)
 
     lessons = (Lesson.query.filter_by(user_id=current_user.id)
                .order_by(Lesson.start_time.asc()).all())
-    visible = [l for l in lessons if l.parity in ("all", parity)]
 
-    by_day = {}
-    for lesson in visible:
-        by_day.setdefault(lesson.weekday, []).append(lesson)
-    for day_lessons in by_day.values():
-        day_lessons.sort(key=lambda x: x.start_time)
-
-    day_dates = {}
-    for offset in range(7):
-        d = today + timedelta(days=offset)
-        day_dates[offset] = d
+    # Текущая неделя целиком: понедельник — воскресенье.
+    week_start = today - timedelta(days=today.weekday())
+    week_end = week_start + timedelta(days=6)
 
     events = (Event.query.filter_by(user_id=current_user.id)
-              .filter(Event.event_date >= today)
-              .filter(Event.event_date < today + timedelta(days=7))
+              .filter(Event.event_date >= week_start)
+              .filter(Event.event_date <= week_end)
               .order_by(Event.event_date.asc(), Event.start_time.asc()).all())
     events_by_date = {}
     for event in events:
         events_by_date.setdefault(event.event_date, []).append(event)
 
-    return render_template("schedule.html", by_day=by_day, day_dates=day_dates,
+    week_days = []
+    for offset in range(7):
+        day = week_start + timedelta(days=offset)
+        day_parity = week_parity_on(day, settings_obj.first_week_parity)
+        week_days.append({
+            "weekday": offset,
+            "date": day,
+            "is_today": day == today,
+            "lessons": [l for l in lessons
+                        if l.weekday == offset and lesson_visible(l, day_parity, settings_obj)],
+            "events": events_by_date.get(day, []),
+        })
+
+    # Полное расписание показывает все занятия независимо от чётности и настроек,
+    # чтобы любое занятие можно было найти, изменить или удалить.
+    full_by_day = {}
+    for lesson in lessons:
+        full_by_day.setdefault(lesson.weekday, []).append(lesson)
+
+    return render_template("schedule.html", week_days=week_days, full_by_day=full_by_day,
+                           week_start=week_start, week_end=week_end,
                            parity=parity, parity_text="чётная" if parity == "even" else "нечётная",
-                           today=today, events_by_date=events_by_date,
-                           weekdays=WEEKDAYS, kinds=LESSON_KINDS,
+                           today=today, weekdays=WEEKDAYS, kinds=LESSON_KINDS,
                            parity_labels=PARITY_LABELS, settings=settings_obj)
 
 
@@ -946,7 +1252,7 @@ def schedule():
 def lesson_create():
     form = LessonForm()
     if request.method == "GET":
-        form.weekday.data = str(date.today().weekday())
+        form.weekday.data = str(today_local().weekday())
     if form.validate_on_submit():
         lesson = Lesson(
             user_id=current_user.id,
@@ -999,13 +1305,19 @@ def lesson_delete(lesson_id):
     return redirect(url_for("schedule"))
 
 
+NOTE_MAX_LEN = 1000
+
+
 @app.route("/schedule/lesson/<int:lesson_id>/note", methods=["POST"])
 @login_required
 def lesson_note(lesson_id):
     lesson = Lesson.query.filter_by(id=lesson_id, user_id=current_user.id).first_or_404()
     text = (request.form.get("note") or "").strip()
+    if len(text) > NOTE_MAX_LEN:
+        flash(f"Пометка слишком длинная: максимум {NOTE_MAX_LEN} символов.", "danger")
+        return redirect(url_for("schedule"))
     lesson.note = text or None
-    lesson.note_updated_at = datetime.utcnow() if text else None
+    lesson.note_updated_at = utcnow() if text else None
     db.session.commit()
     flash("Заметка сохранена." if text else "Заметка удалена.", "success")
     return redirect(url_for("schedule"))
@@ -1015,13 +1327,12 @@ def lesson_note(lesson_id):
 @app.route("/calendar")
 @login_required
 def calendar_view():
-    today = date.today()
+    today = today_local()
+    # Годы вне разумного диапазона и несуществующие месяцы не должны ломать страницу (раньше — 500).
     year = request.args.get("year", type=int) or today.year
     month = request.args.get("month", type=int) or today.month
-    if month < 1:
-        month, year = 12, year - 1
-    if month > 12:
-        month, year = 1, year + 1
+    year = max(1970, min(2100, year))
+    month = max(1, min(12, month))
 
     settings_obj = current_user.settings_or_create()
     first_day = date(year, month, 1)
@@ -1048,7 +1359,8 @@ def calendar_view():
     cells = []
     for day in week:
         parity = week_parity_on(day, settings_obj.first_week_parity)
-        day_lessons = [l for l in lessons if l.weekday == day.weekday() and l.parity in ("all", parity)]
+        day_lessons = [l for l in lessons
+                       if l.weekday == day.weekday() and lesson_visible(l, parity, settings_obj)]
         cells.append({
             "date": day,
             "in_month": day.month == month,
@@ -1062,7 +1374,11 @@ def calendar_view():
     month_names = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
                    "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
 
+    month_events = sorted((e for e in events if e.status != "cancelled"),
+                          key=lambda e: (e.event_date, e.start_time or time(0, 0)))
+
     return render_template("calendar.html", cells=cells, month=month, year=year,
+                           month_events=month_events,
                            month_title=f"{month_names[month - 1]} {year}",
                            prev_link={"year": prev_month.year, "month": prev_month.month},
                            next_link={"year": next_month.year, "month": next_month.month},
@@ -1075,7 +1391,7 @@ def calendar_view():
 def grades():
     form = GradeForm()
     if request.method == "GET":
-        form.graded_on.data = date.today()
+        form.graded_on.data = today_local()
     if form.validate_on_submit():
         grade = Grade(
             user_id=current_user.id,
@@ -1083,7 +1399,7 @@ def grades():
             value=form.value.data,
             weight=form.weight.data or 1,
             control=(form.control.data or "").strip() or None,
-            graded_on=form.graded_on.data or date.today(),
+            graded_on=form.graded_on.data or today_local(),
         )
         db.session.add(grade)
         db.session.commit()
@@ -1092,9 +1408,8 @@ def grades():
 
     rows = Grade.query.filter_by(user_id=current_user.id).order_by(Grade.graded_on.desc()).all()
 
-    weighted_sum = sum(g.value * g.weight for g in rows)
-    weight_total = sum(g.weight for g in rows)
-    average = round(weighted_sum / weight_total, 2) if weight_total else None
+    average = weighted_average(rows)
+    user_settings = current_user.settings_or_create()
 
     by_subject = {}
     for grade in rows:
@@ -1116,7 +1431,8 @@ def grades():
 
     return render_template("grades.html", form=form, rows=rows, average=average,
                            subjects=subjects, distribution=distribution,
-                           total=len(rows), risk=risk)
+                           total=len(rows), risk=risk,
+                           notify_grades=bool(user_settings.notify_grades))
 
 
 @app.route("/grades/<int:grade_id>/delete", methods=["POST"])
@@ -1134,10 +1450,14 @@ def grade_delete(grade_id):
 @login_required
 def moodle():
     profile_obj = current_user.profile_or_create()
-    connected = bool(profile_obj.moodle_url and profile_obj.moodle_token)
+    connected = profile_obj.moodle_connected
     lessons = Lesson.query.filter_by(user_id=current_user.id).all()
     return render_template("moodle.html", profile=profile_obj, connected=connected,
                            lessons=lessons, kinds=LESSON_KINDS)
+
+
+def render_error(code, title, message):
+    return render_template("error.html", code=code, title=title, message=message), code
 
 
 @app.errorhandler(429)
@@ -1148,6 +1468,40 @@ def ratelimit_handler(e):
 @app.errorhandler(404)
 def not_found_handler(e):
     return render_template("404.html"), 404
+
+
+@app.errorhandler(CSRFError)
+def csrf_error_handler(e):
+    # Обычно это значит, что страница была открыта слишком давно или cookie отключены.
+    return render_error(400, "Сессия устарела",
+                        "Форма была открыта слишком давно или cookie отключены в браузере. "
+                        "Обновите страницу и повторите действие.")
+
+
+@app.errorhandler(400)
+def bad_request_handler(e):
+    return render_error(400, "Некорректный запрос", "Не удалось обработать запрос. Проверьте данные и попробуйте снова.")
+
+
+@app.errorhandler(403)
+def forbidden_handler(e):
+    return render_error(403, "Доступ запрещён", "У вас нет прав на это действие.")
+
+
+@app.errorhandler(405)
+def method_not_allowed_handler(e):
+    return render_error(405, "Действие недоступно", "Эта страница не поддерживает такой способ обращения.")
+
+
+@app.errorhandler(413)
+def too_large_handler(e):
+    return render_error(413, "Слишком большой запрос", "Отправленные данные превышают допустимый размер.")
+
+
+@app.errorhandler(500)
+def server_error_handler(e):
+    db.session.rollback()
+    return render_error(500, "Что-то пошло не так", "На сервере произошла ошибка. Мы уже в курсе — попробуйте позже.")
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@
 </div>
 
 <div class="card card--flush">
-    <div class="card__head" style="padding:1.1rem 1.2rem 0;">
+    <div class="card__head card__head--flush">
         <h2>Список</h2>
         <span class="small muted">всего: {{ events|length }}</span>
     </div>
@@ -40,16 +40,16 @@
             <tbody>
                 {% for item in events %}
                 <tr>
-                    <td class="nowrap num">{{ item.event_date.strftime("%d.%m.%Y") }}</td>
-                    <td>
+                    <td class="nowrap num" data-label="Дата">{{ item.event_date.strftime("%d.%m.%Y") }}</td>
+                    <td data-label="Мероприятие">
                         <strong>{{ item.title }}</strong>
                         {% if item.description %}<div class="small muted">{{ item.description|truncate(70) }}</div>{% endif %}
                     </td>
-                    <td><span class="badge badge--{{ item.kind }}">{{ item.kind_label }}</span></td>
-                    <td class="nowrap">{{ item.time_label }}</td>
-                    <td class="small">{{ item.location or "—" }}</td>
-                    <td class="small">{{ item.status_label }}</td>
-                    <td style="text-align:right;white-space:nowrap;">
+                    <td data-label="Тип"><span class="badge badge--{{ item.kind }}">{{ item.kind_label }}</span></td>
+                    <td class="nowrap" data-label="Время">{{ item.time_label }}</td>
+                    <td class="small" data-label="Место">{{ item.location or "—" }}</td>
+                    <td class="small" data-label="Статус">{{ item.status_label }}</td>
+                    <td class="actions">
                         <a class="btn btn--ghost btn--sm" href="{{ url_for('event_edit', event_id=item.id) }}">Изменить</a>
                         <form class="inline-form" method="post" action="{{ url_for('event_delete', event_id=item.id) }}" data-confirm="Удалить мероприятие «{{ item.title }}»?">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

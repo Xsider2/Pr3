@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block layout %}
+<div class="auth__panel" style="min-height:100vh;">
+    <div class="auth__card" style="text-align:center;">
+        <div class="muted small" style="letter-spacing:.2em;margin-bottom:.4rem;">ОШИБКА {{ code }}</div>
+        <h1 style="color:var(--wine-900);">{{ title }}</h1>
+        <p class="sub" style="margin-bottom:1.4rem;">{{ message }}</p>
+        <div style="display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap;">
+            <a href="{{ url_for('index') }}" class="btn btn--ghost" data-back>Назад</a>
+            <a href="{{ url_for('index') }}" class="btn btn--primary">На главную</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

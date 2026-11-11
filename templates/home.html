@@ -8,7 +8,7 @@
     <div class="auth__brandline" style="color:var(--gold-400);">личный кабинет</div>
     <h2>Привет, {{ profile.full_name or current_user.display_name }}!</h2>
     <p>Сегодня {{ parity_text }} неделя. {% if lessons_today %}Пар сегодня: {{ lessons_today|length }}.{% else %}Пар по расписанию на сегодня нет.{% endif %}
-       {% if events %}Ближайшее мероприятие — {{ events[0].title }} ({{ events[0].event_date.strftime("%d.%m") }}).{% endif %}</p>
+       {% if events and notify_events %}Ближайшее мероприятие — {{ events[0].title }} ({{ events[0].event_date.strftime("%d.%m") }}).{% endif %}</p>
     <div class="hero__row">
         <a class="btn btn--gold" href="{{ url_for('event_create') }}">+ Добавить мероприятие</a>
         <a class="btn btn--ghost" href="{{ url_for('schedule') }}">Открыть расписание</a>
@@ -17,11 +17,13 @@
 </section>
 
 <div class="grid grid--3" style="margin-bottom:1.2rem;">
+    {% if notify_grades %}
     <div class="stat stat--gold">
         <div class="stat__label">Средний балл</div>
         <div class="stat__value">{{ average if average is not none else "—" }} <small>/ 5.0</small></div>
-        <div class="small muted">оценок в журнале: {{ grades_count }}</div>
+        <div class="small muted">{{ grades_count|ru_plural('оценка','оценки','оценок') }} в журнале</div>
     </div>
+    {% endif %}
     <div class="stat">
         <div class="stat__label">Мероприятия</div>
         <div class="stat__value">{{ events_count }} <small>всего</small></div>
@@ -36,7 +38,7 @@
 
 <div class="grid grid--sidebar">
     <div class="card card--flush">
-        <div class="card__head" style="padding:1.2rem 1.2rem 0;">
+        <div class="card__head card__head--flush">
             <h2>Ближайшие мероприятия</h2>
             <a class="btn btn--ghost btn--sm" href="{{ url_for('events') }}">Все</a>
         </div>
@@ -45,12 +47,13 @@
             <article class="event">
                 <div class="event__date">
                     <b>{{ item.event_date.strftime("%d") }}</b>
-                    <span>{{ item.event_date.strftime("%m.%y") }}</span>
+                    <span>{{ item.event_date|ru_month }}</span>
                 </div>
                 <div class="event__body">
                     <h4>{{ item.title }}</h4>
                     <div class="event__meta">
                         <span class="badge badge--{{ item.kind }}">{{ item.kind_label }}</span>
+                        {% if notify_events %}{% set days_left = (item.event_date - today).days %}{% if days_left <= 2 %}<span class="badge badge--exam">{{ "сегодня" if days_left <= 0 else ("завтра" if days_left == 1 else "через 2 дня") }}</span>{% endif %}{% endif %}
                         <span>{{ item.time_label }}</span>
                         {% if item.location %}<span>{{ item.location }}</span>{% endif %}
                     </div>

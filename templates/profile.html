@@ -9,14 +9,14 @@
     <div>
         <h2>{{ profile.full_name or "Имя не указано" }}</h2>
         <p>{{ current_user.email }}{% if profile.group_name %} · группа {{ profile.group_name }}{% endif %}{% if profile.faculty %} · {{ profile.faculty }}{% endif %}</p>
-        <p class="small" style="opacity:.7;">Аккаунт создан {{ current_user.created_at.strftime("%d.%m.%Y в %H:%M") }}</p>
+        <p class="small" style="opacity:.7;">Аккаунт создан {{ current_user.created_at|localdt("%d.%m.%Y в %H:%M") }}</p>
     </div>
     <div class="spacer"></div>
     <a class="btn btn--gold" href="{{ url_for('settings') }}">Настройки аккаунта</a>
 </section>
 
 <div class="grid grid--3" style="margin-bottom:1.2rem;">
-    <div class="stat --gold">
+    <div class="stat stat--gold">
         <div class="stat__label">Средний балл</div>
         <div class="stat__value">{{ average if average is not none else "—" }}</div>
         <div class="small muted">по всем оценкам</div>
@@ -85,13 +85,13 @@
             <div class="card__head"><h3>Как хранятся данные</h3></div>
             <p class="small muted" style="margin:0 0 .6rem;">
                 Профиль, мероприятия, расписание и оценки хранятся в отдельных таблицах и привязаны к вашему аккаунту.
-                Пароль записывается только как необратимый хеш — исходный текст не сохраняется.
+                Пароль не хранится в открытом виде — его нельзя ни прочитать, ни восстановить.
             </p>
             <dl class="kv">
                 <dt>Учётная запись</dt><dd>{{ current_user.email }}</dd>
-                <dt>Пароль</dt><dd>хеш (wsgi-алгоритм)</dd>
+                <dt>Пароль</dt><dd>хранится в зашифрованном виде</dd>
                 <dt>Профиль</dt><dd>{% if profile.full_name %}заполнен{% else %}не заполнен{% endif %}</dd>
-                <dt>Moodle</dt><dd>{% if profile.moodle_url and profile.moodle_token %}подключён{% else %}не подключён{% endif %}</dd>
+                <dt>Moodle</dt><dd>{% if profile.moodle_connected %}подключён{% else %}не подключён{% endif %}</dd>
             </dl>
         </div>
 

@@ -31,7 +31,7 @@
             <div class="switch-row">
                 <div class="switch-row__text">
                     <strong>Показывать нечётные недели</strong>
-                    <small>Нечётные недели отображаются в расписании наравне с чётными</small>
+                    <small>Если выключить, занятия нечётных недель скрываются на главной, в календаре и в расписании на неделю</small>
                 </div>
                 <label class="switch">
                     {{ settings_form.show_odd_weeks() }}
@@ -42,7 +42,7 @@
             <div class="switch-row">
                 <div class="switch-row__text">
                     <strong>Напоминать о мероприятиях</strong>
-                    <small>Выделять ближайшие события на главной</small>
+                    <small>На главной подсвечиваются события, которые начнутся сегодня, завтра или послезавтра</small>
                 </div>
                 <label class="switch">
                     {{ settings_form.notify_events() }}
@@ -53,7 +53,7 @@
             <div class="switch-row">
                 <div class="switch-row__text">
                     <strong>Сообщать о новых оценках</strong>
-                    <small>Показывать средний балл и предупреждения</small>
+                    <small>Показывать средний балл на главной и предупреждения о дисциплинах с низким баллом</small>
                 </div>
                 <label class="switch">
                     {{ settings_form.notify_grades() }}
@@ -123,7 +123,7 @@
         <div class="card" id="moodle">
             <div class="card__head">
                 <h2>Связка с Moodle</h2>
-                {% if settings and current_user.profile and current_user.profile.moodle_url and current_user.profile.moodle_token %}
+                {% if moodle_profile.moodle_connected %}
                 <span class="badge badge--olymp">подключено</span>
                 {% else %}
                 <span class="badge badge--other">не подключено</span>
@@ -135,13 +135,21 @@
                 <div class="field">
                     {{ moodle_form.moodle_url.label }}
                     {{ moodle_form.moodle_url(class="input", placeholder="https://moodle.institute.ru") }}
+                    {% for error in moodle_form.moodle_url.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
                 </div>
                 <div class="field">
                     {{ moodle_form.moodle_token.label }}
-                    {{ moodle_form.moodle_token(class="input", placeholder="Токен веб-сервиса Moodle") }}
-                    <div class="hint">Токен хранится в профиле и не отображается другим пользователям.</div>
+                    {% if moodle_form.moodle_token.errors %}{% for error in moodle_form.moodle_token.errors %}<div class="error-text">{{ error }}</div>{% endfor %}{% endif %}
+                    {{ moodle_form.moodle_token(class="input", autocomplete="off",
+                        placeholder=("Сохранён (••••" ~ moodle_profile.moodle_token_hint ~ "). Оставьте пустым, чтобы не менять") if moodle_profile.moodle_token else "Токен веб-сервиса Moodle") }}
+                    <div class="hint">Токен хранится в зашифрованном виде, виден только вам и никогда не показывается на странице целиком.</div>
                 </div>
-                <button type="submit" class="btn btn--ghost">Сохранить связку</button>
+                <div class="form-actions" style="margin-top:.4rem;">
+                    <button type="submit" class="btn btn--ghost">Сохранить связку</button>
+                    {% if moodle_profile.moodle_connected %}
+                    <button type="submit" name="disconnect" value="1" class="btn btn--danger" data-confirm-click="Отключить Moodle и удалить сохранённый токен?">Отключить</button>
+                    {% endif %}
+                </div>
             </form>
         </div>
     </div>
