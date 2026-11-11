@@ -22,21 +22,36 @@
         <div class="cal__cell {% if not cell.in_month %}is-muted{% endif %} {% if cell.is_today %}is-today{% endif %}"
              title="{{ cell.date.strftime('%d.%m.%Y') }}">
             <span class="cal__num">{{ cell.date.day }}</span>
-            {% if cell.lessons %}
-            <span class="cal__dot cal__dot--class">{{ cell.lessons }} пар</span>
-            {% endif %}
-            {% for event in cell.events[:2] %}
-            <a class="cal__dot cal__dot--event" href="{{ url_for('event_edit', event_id=event.id) }}" title="{{ event.title }}">{{ event.title }}</a>
-            {% endfor %}
-            {% if cell.events|length > 2 %}
-            <span class="small muted">+{{ cell.events|length - 2 }}</span>
-            {% endif %}
+            <div class="cal__marks">
+                {% if cell.lessons %}
+                <span class="cal__dot cal__dot--class" title="{{ cell.lessons|ru_plural('пара','пары','пар') }}">{{ cell.lessons|ru_plural('пара','пары','пар') }}</span>
+                {% endif %}
+                {% for event in cell.events[:2] %}
+                <a class="cal__dot cal__dot--event" href="{{ url_for('event_edit', event_id=event.id) }}" title="{{ event.title }}">{{ event.title }}</a>
+                {% endfor %}
+                {% if cell.events|length > 2 %}
+                <span class="small muted cal__more">+{{ cell.events|length - 2 }}</span>
+                {% endif %}
+            </div>
         </div>
         {% endfor %}
     </div>
     <div class="small muted" style="margin-top:.9rem;">
-        <span class="cal__dot cal__dot--class" style="display:inline-block;">3 пар</span> — количество занятий по чётности недели,
-        <span class="cal__dot cal__dot--event" style="display:inline-block;">мероприятие</span> — переход к редактированию.
+        <span class="cal__dot cal__dot--class cal__dot--legend">3 пары</span> — количество занятий с учётом чётности недели,
+        <span class="cal__dot cal__dot--event cal__dot--legend">мероприятие</span> — переход к редактированию.
     </div>
 </div>
+
+{% if month_events %}
+<div class="card cal-list" style="margin-top:1.1rem;">
+    <div class="card__head"><h3>События месяца</h3></div>
+    {% for item in month_events %}
+    <a class="cal-list__item" href="{{ url_for('event_edit', event_id=item.id) }}">
+        <b>{{ item.event_date.day }} {{ item.event_date|ru_month }}</b>
+        <span>{{ item.title }}</span>
+        <small>{{ item.time_label }}</small>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
 {% endblock %}

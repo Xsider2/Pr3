@@ -43,9 +43,10 @@
                     {{ form.start_time.label }}
                     {{ form.start_time(class="input", type="time") }}
                 </div>
-                <div class="field">
+                <div class="field {% if form.end_time.errors %}field--error{% endif %}">
                     {{ form.end_time.label }}
                     {{ form.end_time(class="input", type="time") }}
+                    {% for error in form.end_time.errors %}<div class="error-text">{{ error }}</div>{% endfor %}
                 </div>
             </div>
 
@@ -78,8 +79,8 @@
         <div class="card">
             <div class="card__head"><h3>Запись</h3></div>
             <dl class="kv">
-                <dt>Создано</dt><dd>{{ item.created_at.strftime("%d.%m.%Y %H:%M") }}</dd>
-                <dt>Обновлено</dt><dd>{{ item.updated_at.strftime("%d.%m.%Y %H:%M") if item.updated_at else "—" }}</dd>
+                <dt>Создано</dt><dd>{{ item.created_at|localdt }}</dd>
+                <dt>Обновлено</dt><dd>{{ item.updated_at|localdt }}</dd>
                 <dt>Тип</dt><dd>{{ item.kind_label }}</dd>
             </dl>
         </div>

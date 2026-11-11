@@ -62,4 +62,35 @@
             }
         });
     });
+
+    // Подтверждение для кнопок вне форм с data-confirm (например, «Отключить Moodle»).
+    document.querySelectorAll("[data-confirm-click]").forEach(function (el) {
+        el.addEventListener("click", function (e) {
+            if (!window.confirm(el.getAttribute("data-confirm-click"))) {
+                e.preventDefault();
+            }
+        });
+    });
+
+    // Ссылка «Назад» на страницах ошибок: возвращает на прошлую страницу, если она есть.
+    document.querySelectorAll("[data-back]").forEach(function (el) {
+        el.addEventListener("click", function (e) {
+            if (window.history.length > 1) {
+                e.preventDefault();
+                window.history.back();
+            }
+        });
+    });
+
+    // Вкладки-якоря (Настройки): подсвечиваем ту, что соответствует адресу #раздела.
+    var anchorTabs = document.querySelectorAll(".tabs .tab[href^='#']");
+    function syncTabs() {
+        if (!anchorTabs.length) return;
+        var current = window.location.hash || anchorTabs[0].getAttribute("href");
+        anchorTabs.forEach(function (tab) {
+            tab.classList.toggle("is-active", tab.getAttribute("href") === current);
+        });
+    }
+    window.addEventListener("hashchange", syncTabs);
+    syncTabs();
 })();

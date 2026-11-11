@@ -13,13 +13,15 @@
     <div class="stat">
         <div class="stat__label">Всего оценок</div>
         <div class="stat__value">{{ total }}</div>
-        <div class="small muted">по {{ subjects|length }} дисциплин(ам)</div>
+        <div class="small muted">по {{ subjects|length|ru_plural('дисциплине','дисциплинам','дисциплинам') }}</div>
     </div>
+    {% if notify_grades %}
     <div class="stat {% if distribution[2] or distribution[3] %}stat--gold{% endif %}">
         <div class="stat__label">Требуют внимания</div>
         <div class="stat__value">{{ risk|length }}</div>
         <div class="small muted">средний балл ниже 3.5</div>
     </div>
+    {% endif %}
 </div>
 
 <div class="grid grid--sidebar">
@@ -33,7 +35,7 @@
                 {% for item in subjects %}
                 <div class="meter">
                     <div class="meter__row">
-                        <span>{{ item.name }} <span class="small muted">({{ item.count }} оценок)</span></span>
+                        <span>{{ item.name }} <span class="small muted">({{ item.count|ru_plural('оценка','оценки','оценок') }})</span></span>
                         <span class="grade grade--{{ item.average|round|int }}">{{ item.average }}</span>
                     </div>
                     <div class="bar"><span style="width: {{ item.percent }}%;"></span></div>
@@ -45,7 +47,7 @@
         </div>
 
         <div class="card card--flush">
-            <div class="card__head" style="padding:1.1rem 1.2rem 0;">
+            <div class="card__head card__head--flush">
                 <h3>Журнал оценок</h3>
             </div>
             {% if rows %}
@@ -55,12 +57,12 @@
                     <tbody>
                     {% for grade in rows %}
                     <tr>
-                        <td class="nowrap num">{{ grade.graded_on.strftime("%d.%m.%Y") }}</td>
-                        <td><strong>{{ grade.subject }}</strong></td>
-                        <td class="small">{{ grade.control or "—" }}</td>
-                        <td class="num">{{ grade.weight }}</td>
-                        <td><span class="grade grade--{{ grade.value }}">{{ grade.value }}</span></td>
-                        <td style="text-align:right;">
+                        <td class="nowrap num" data-label="Дата">{{ grade.graded_on.strftime("%d.%m.%Y") }}</td>
+                        <td data-label="Дисциплина"><strong>{{ grade.subject }}</strong></td>
+                        <td class="small" data-label="За что">{{ grade.control or "—" }}</td>
+                        <td class="num" data-label="Вес">{{ grade.weight }}</td>
+                        <td data-label="Оценка"><span class="grade grade--{{ grade.value }}">{{ grade.value }}</span></td>
+                        <td class="actions">
                             <form class="inline-form" method="post" action="{{ url_for('grade_delete', grade_id=grade.id) }}" data-confirm="Удалить оценку {{ grade.value }} по «{{ grade.subject }}»?">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn--danger btn--sm">Удалить</button>
@@ -125,7 +127,7 @@
             {% endfor %}
         </div>
 
-        {% if risk %}
+        {% if risk and notify_grades %}
         <div class="card">
             <div class="card__head"><h3>Требуют внимания</h3></div>
             {% for item in risk %}

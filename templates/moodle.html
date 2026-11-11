@@ -19,10 +19,10 @@
             {% if connected %}
             <dl class="kv" style="margin-bottom:1.1rem;">
                 <dt>Адрес Moodle</dt><dd>{{ profile.moodle_url }}</dd>
-                <dt>Токен</dt><dd>••••••••{{ profile.moodle_token[-4:] if profile.moodle_token|length > 4 else "" }}</dd>
-                <dt>Последнее обновление</dt><dd>{{ profile.updated_at.strftime("%d.%m.%Y %H:%M") if profile.updated_at else "—" }}</dd>
+                <dt>Токен</dt><dd>••••••••{{ profile.moodle_token_hint }}</dd>
+                <dt>Последнее обновление</dt><dd>{{ profile.updated_at|localdt }}</dd>
             </dl>
-            <p class="small muted">Система использует сохранённый адрес и токен веб-сервиса Moodle, чтобы подтянуть список ваших курсов и контрольных точек. Токен хранится только в вашем профиле.</p>
+            <p class="small muted">Система использует сохранённый адрес и токен веб-сервиса Moodle, чтобы подтянуть список ваших курсов и контрольных точек. Токен хранится в зашифрованном виде и виден только вам.</p>
             {% else %}
             <p class="small muted">Укажите адрес портала Moodle и токен веб-сервиса — они нужны, чтобы объединить расписание с курсами и дедлайнами заданий.</p>
             {% endif %}
@@ -34,7 +34,7 @@
         </div>
 
         <div class="card card--flush">
-            <div class="card__head" style="padding:1.1rem 1.2rem 0;">
+            <div class="card__head card__head--flush">
                 <h2>Дисциплины, которые попадут в связку</h2>
                 <span class="small muted">{{ lessons|length }}</span>
             </div>
@@ -45,10 +45,10 @@
                     <tbody>
                     {% for lesson in lessons %}
                     <tr>
-                        <td><strong>{{ lesson.subject }}</strong></td>
-                        <td class="small">{{ kinds.get(lesson.kind, lesson.kind) }}</td>
-                        <td class="small nowrap">{{ lesson.weekday_label }}</td>
-                        <td>
+                        <td data-label="Дисциплина"><strong>{{ lesson.subject }}</strong></td>
+                        <td class="small" data-label="Тип">{{ kinds.get(lesson.kind, lesson.kind) }}</td>
+                        <td class="small nowrap" data-label="День">{{ lesson.weekday_label }}</td>
+                        <td data-label="Связь с Moodle">
                             {% if connected %}
                             <span class="badge badge--study">готова к синхронизации</span>
                             {% else %}

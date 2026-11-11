@@ -28,6 +28,34 @@
     --sidebar-w: 258px;
 }
 
+/* ---------- Темы оформления (настройка «Оформление») ----------
+   «Песочная» — палитра по умолчанию (:root выше). Остальные меняют только переменные. */
+[data-theme="wine"] {
+    --sand-100: #f9e9ec;
+    --sand-200: #f4d2d8;
+    --sand-300: #ebbfc7;
+    --sand-500: #a8737d;
+    --wine-900: #3a0716;
+    --wine-800: #6e1233;
+    --wine-700: #5a2233;
+    --navy-800: #2b1030;
+    --navy-700: #3b1b40;
+    --muted: #70585f;
+}
+
+[data-theme="navy"] {
+    --sand-100: #e8eef8;
+    --sand-200: #cfdbef;
+    --sand-300: #bccbe4;
+    --sand-500: #6c7f9f;
+    --wine-900: #0d1730;
+    --wine-800: #14213d;
+    --wine-700: #25365c;
+    --navy-800: #09101f;
+    --navy-700: #1d2f52;
+    --muted: #5b6577;
+}
+
 * { box-sizing: border-box; }
 
 html, body {
@@ -435,6 +463,7 @@ textarea.input {
 .event { display: flex; gap: .9rem; padding: 1rem 1.15rem; border-bottom: 1px solid rgba(76, 43, 41, .08); }
 .event:last-child { border-bottom: 0; }
 .event__date {
+    align-self: flex-start;
     flex: 0 0 56px;
     text-align: center;
     border-radius: var(--radius-sm);
@@ -662,7 +691,7 @@ table.data tbody tr:hover { background: rgba(251, 230, 211, .4); }
 .grade--2 { color: #b3261e; }
 .meter { display: grid; gap: .35rem; margin-bottom: .9rem; }
 .meter__row { display: flex; justify-content: space-between; font-size: .84rem; }
-.meter__row span:last-child { font-weight: 700; color: var(--wine-900); }
+.meter__row > span:last-child { font-weight: 700; color: var(--wine-900); }
 
 /* ---------- Настройки ---------- */
 .settings-grid { display: grid; gap: 1.1rem; }
@@ -763,5 +792,89 @@ table.data tbody tr:hover { background: rgba(251, 230, 211, .4); }
     h1 { font-size: 1.5rem; }
     .hero { padding: 1.5rem 1.2rem; }
     .card { padding: 1.15rem; }
+    .card--flush { padding: 0; }
     .event { flex-wrap: wrap; }
+}
+
+
+/* ====================================================================
+   Дополнения: выравнивание карточек, расписание, таблицы и календарь
+   ==================================================================== */
+
+/* Карточки не растягиваются под высоту соседа — нет пустых «хвостов». */
+.grid--sidebar, .grid--2 { align-items: start; }
+
+.card__head--flush { padding: 1.2rem 1.2rem 0; }
+
+/* Расписание: сегодняшний день и мероприятия */
+.day--today { border-color: rgba(252, 163, 17, .55); box-shadow: 0 0 0 2px rgba(252, 163, 17, .16), var(--shadow-card); }
+.lesson--event { background: rgba(252, 163, 17, .06); }
+
+/* Компактное расписание (настройка «Компактное расписание») */
+.is-compact .day { margin-bottom: .5rem; }
+.is-compact .day__head { padding: .45rem .85rem; }
+.is-compact .lesson { padding: .4rem .85rem; gap: .6rem; }
+.is-compact .lesson__title { font-size: .88rem; margin-bottom: 0; }
+.is-compact .lesson__meta { font-size: .74rem; }
+
+/* Действия в таблицах */
+table.data td.actions { text-align: right; white-space: nowrap; }
+
+/* Календарь: метки внутри ячейки */
+.cal__marks { display: flex; flex-direction: column; gap: .18rem; min-width: 0; }
+.cal__dot--legend { display: inline-block; }
+.cal-list { display: none; }
+.cal-list__item {
+    display: grid;
+    grid-template-columns: 4.6rem minmax(0, 1fr) auto;
+    gap: .6rem;
+    align-items: baseline;
+    padding: .6rem 0;
+    border-bottom: 1px solid rgba(76, 43, 41, .08);
+    color: var(--ink);
+}
+.cal-list__item:last-child { border-bottom: 0; }
+.cal-list__item b { color: var(--wine-900); font-variant-numeric: tabular-nums; }
+.cal-list__item small { color: var(--muted); }
+.cal-list__item:hover { text-decoration: none; background: rgba(251, 230, 211, .35); }
+
+/* ---------- Телефон: таблицы превращаются в карточки ---------- */
+@media (max-width: 640px) {
+    table.data, table.data tbody, table.data tr, table.data td { display: block; width: 100%; }
+    table.data thead { display: none; }
+    table.data tr { padding: .75rem 1.1rem; border-bottom: 1px solid rgba(76, 43, 41, .12); }
+    table.data tr:last-child { border-bottom: 0; }
+    table.data td {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 1rem;
+        padding: .22rem 0;
+        border: 0;
+        text-align: right;
+    }
+    table.data td::before {
+        content: attr(data-label);
+        flex: 0 0 34%;
+        text-align: left;
+        font-size: .7rem;
+        letter-spacing: .07em;
+        text-transform: uppercase;
+        color: var(--muted);
+    }
+    table.data td.actions { justify-content: flex-end; flex-wrap: wrap; gap: .4rem; padding-top: .55rem; }
+    table.data td.actions::before { content: none; }
+    table.data tbody tr:hover { background: none; }
+
+    /* Календарь: вместо подписей — цветные точки, события ниже списком */
+    .cal__cell { min-height: 54px; padding: .3rem .2rem; align-items: center; gap: .15rem; }
+    .cal__marks { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 3px; }
+    .cal__dot { font-size: 0; width: 8px; height: 8px; padding: 0; border-radius: 50%; display: block; }
+    .cal__dot--class { background: var(--navy-700); }
+    .cal__dot--event { background: var(--gold-500); }
+    .cal__dot--legend { font-size: .68rem; width: auto; height: auto; padding: .05rem .3rem; border-radius: 4px; display: inline-block; }
+    .cal__dot--legend.cal__dot--class { background: rgba(20, 33, 61, .1); }
+    .cal__dot--legend.cal__dot--event { background: rgba(252, 163, 17, .22); }
+    .cal__more { display: none; }
+    .cal-list { display: block; }
 }
